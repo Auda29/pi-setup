@@ -1,5 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
+    [string]$ProjectRoot = (Get-Location).Path,
     [switch]$RemoveGlobalPi,
     [switch]$KeepSettings,
     [switch]$KeepLogs,
@@ -9,12 +10,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
-$PiDir = Join-Path $ProjectRoot '.pi'
-$PackagesDir = Join-Path $ProjectRoot '.pi-packages'
+$ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+$ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
+$PiDir = Join-Path $ResolvedProjectRoot '.pi'
+$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
 $SettingsPath = Join-Path $PiDir 'settings.json'
-$StartScriptPath = Join-Path $ScriptDir 'start-pi.ps1'
+$StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $LogsDir = Join-Path $PiDir 'logs'
 $BackupsDir = Join-Path $PiDir 'backups'
 $UninstallLogPath = Join-Path $LogsDir ("uninstall-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -105,6 +106,7 @@ try {
         Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
+    Write-Info "Project root: $ResolvedProjectRoot"
     Write-Info "Uninstall log: $UninstallLogPath"
 
     Write-Step 'Removing local Pi packages'

@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [string]$ProjectRoot = (Get-Location).Path,
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
@@ -16,14 +17,15 @@ else {
     ($PSVersionTable.PSEdition -eq 'Desktop') -or ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
 }
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
-$PiDir = Join-Path $ProjectRoot '.pi'
-$PackagesDir = Join-Path $ProjectRoot '.pi-packages'
+$InstallerScriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+$ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+$ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
+$PiDir = Join-Path $ResolvedProjectRoot '.pi'
+$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
 $PackagesManifestPath = Join-Path $PackagesDir 'package.json'
 $PackagesLockPath = Join-Path $PackagesDir 'package-lock.json'
 $SettingsPath = Join-Path $PiDir 'settings.json'
-$StartScriptPath = Join-Path $ScriptDir 'start-pi.ps1'
+$StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $SettingsBackupDir = Join-Path $PiDir 'backups'
 $LogsDir = Join-Path $PiDir 'logs'
 $InstallLogPath = Join-Path $LogsDir ("install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -651,6 +653,7 @@ try {
     Write-Host "pi:   $(& $piExe --version)"
 
     Write-Step 'Preparing project structure'
+    Ensure-Directory -Path $ProjectScriptsDir
     Ensure-Directory -Path $PackagesDir
     Ensure-PackageManifest
 
@@ -740,6 +743,7 @@ exit `$LASTEXITCODE
 
     Write-Step 'Done'
     Write-Host 'Successfully prepared:' -ForegroundColor Green
+    Write-Host "  - Project root: $ResolvedProjectRoot"
     Write-Host "  - Global: @mariozechner/pi-coding-agent"
     foreach ($packageName in $PackageNames) {
         Write-Host "  - Local:  $packageName"
@@ -755,11 +759,12 @@ exit `$LASTEXITCODE
     }
     Write-Host "  - $SettingsPath"
     Write-Host "  - $StartScriptPath"
-    Write-Host "  - $($MyInvocation.MyCommand.Path)"
+    Write-Host "  - $InstallerScriptPath"
     Write-Host "  - $InstallLogPath"
 
-    Write-Host "`nRecommended startup on Windows:"
+    Write-Host "`nRecommended startup on Windows from the target repo:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1"
+    Write-Host "  # target repo: $ResolvedProjectRoot"
 }
 catch {
     $ScriptExitCode = 1

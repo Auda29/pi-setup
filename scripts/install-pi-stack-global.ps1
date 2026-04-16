@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = (Join-Path $PWD 'pi-stack'),
+    [string]$InstallRoot = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi-stack'),
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
@@ -10,17 +10,14 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$IsWindowsPlatform = if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
-    [bool]$IsWindows
-}
-else {
-    ($PSVersionTable.PSEdition -eq 'Desktop') -or ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
-}
-
 $TranscriptStarted = $false
 $ScriptExitCode = 0
 $ResolvedInstallRoot = $null
-$StandaloneScriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+$GlobalScriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+$UserProfilePath = [Environment]::GetFolderPath('UserProfile')
+$GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
+$GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
+$GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
 
 $PinnedVersions = [ordered]@{
     'mempalace-pi'   = '0.2.0'
@@ -258,18 +255,18 @@ function Remove-StaleGlobalPiCodingAgent {
         Invoke-External -FilePath $NpmExe -Arguments @('uninstall', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
     }
     catch {
-        Write-Warning "Global uninstall cleanup failed: $($_.Exception.Message)"
+        Write-Warning "Global uninstall reported an issue: $($_.Exception.Message)"
     }
 
-    foreach ($path in @($packagePath) + $shimCandidates) {
-        if (-not $path) { continue }
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        try {
-            Write-Info "Removing stale path: $path"
-            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
-        }
-        catch {
-            Write-Warning "Could not remove stale path '$path': $($_.Exception.Message)"
+    foreach ($candidate in @($packagePath) + $shimCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
+            try {
+                Remove-Item -LiteralPath $candidate -Recurse -Force -ErrorAction Stop
+                Write-Info "Removed stale path: $candidate"
+            }
+            catch {
+                Write-Warning "Could not remove stale path '$candidate': $($_.Exception.Message)"
+            }
         }
     }
 }
@@ -277,52 +274,18 @@ function Remove-StaleGlobalPiCodingAgent {
 function Install-GlobalPiCodingAgent {
     param([Parameter(Mandatory = $true)][string]$NpmExe)
 
-    Write-Step 'Installing or updating pi-coding-agent globally'
-
-    if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $GlobalPiCodingAgentVersion)) {
-        throw "Fallback package version is not available: @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion"
+    $packageVersion = $GlobalPiCodingAgentVersion
+    if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $packageVersion)) {
+        throw "Pinned version @mariozechner/pi-coding-agent@$packageVersion is not available on npm."
     }
 
-    $latestVersionText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'version', '--json')
-    $latestVersion = if ($latestVersionText) { $latestVersionText.Trim('"') } else { $null }
+    $versionJson = Get-NpmViewJson -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'version', '--json')
+    $latestInfo = if ($versionJson) { ($versionJson | Out-String).Trim() } else { 'unknown' }
+    Write-Info "Installing @mariozechner/pi-coding-agent@$packageVersion (npm latest currently: $latestInfo)"
 
-    $latestPiAiRange = $null
-    if ($latestVersion) {
-        $latestDependenciesText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', ("@mariozechner/pi-coding-agent@" + $latestVersion), 'dependencies', '--json')
-        if ($latestDependenciesText -match '"@mariozechner/pi-ai"\s*:\s*"([^"]+)"') {
-            $latestPiAiRange = $Matches[1]
-        }
-    }
-
-    $fallbackNeeded = $false
-    if ($latestPiAiRange -match '(\d+\.\d+\.\d+)') {
-        $latestPiAiVersion = $Matches[1]
-        if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-ai' -Version $latestPiAiVersion)) {
-            Write-Warning "Latest @mariozechner/pi-coding-agent@$latestVersion depends on @mariozechner/pi-ai $latestPiAiRange, but that version is not published. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
-            $fallbackNeeded = $true
-        }
-    }
-    elseif (-not $latestVersion) {
-        Write-Warning "Could not reliably determine the latest @mariozechner/pi-coding-agent version from npm. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
-        $fallbackNeeded = $true
-    }
-
-    if (-not $fallbackNeeded) {
-        try {
-            Write-Info 'Trying latest @mariozechner/pi-coding-agent once before fallback validation.'
-            Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
-            return
-        }
-        catch {
-            Write-Warning "Installing latest @mariozechner/pi-coding-agent failed. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion. Error: $($_.Exception.Message)"
-        }
-    }
-
-    Write-Info 'Preparing a clean fallback install state for the global pi-coding-agent package.'
-    Remove-StaleGlobalPiCodingAgent -NpmExe $NpmExe
-
-    Invoke-WithRetry -Description "npm install -g @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion" -Action {
-        Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@" + $GlobalPiCodingAgentVersion), '--no-fund', '--no-audit')
+    Invoke-WithRetry -Description 'npm uninstall/install -g @mariozechner/pi-coding-agent' -Action {
+        Remove-StaleGlobalPiCodingAgent -NpmExe $NpmExe
+        Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@{0}" -f $packageVersion), '--no-fund', '--no-audit')
     } -MaxAttempts 3 -DelaySeconds 5
 }
 
@@ -395,6 +358,50 @@ function Save-JsonObject {
     Set-Content -LiteralPath $Path -Value ($json + "`n") -Encoding UTF8
 }
 
+function Load-JsonObject {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return [ordered]@{}
+    }
+
+    $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return [ordered]@{}
+    }
+
+    try {
+        $parsed = $raw | ConvertFrom-Json -AsHashtable
+        if ($null -eq $parsed) {
+            return [ordered]@{}
+        }
+        return $parsed
+    }
+    catch {
+        throw "Could not parse JSON file '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Merge-UniqueStrings {
+    param(
+        $Existing,
+        [string[]]$Incoming
+    )
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $result = New-Object System.Collections.Generic.List[string]
+
+    foreach ($item in @($Existing) + @($Incoming)) {
+        if ($item -isnot [string]) { continue }
+        if ([string]::IsNullOrWhiteSpace($item)) { continue }
+        if ($seen.Add($item)) {
+            [void]$result.Add($item)
+        }
+    }
+
+    return @($result)
+}
+
 function Get-NpmExecutable {
     $npmCmd = Get-CommandPathSafe -Name 'npm.cmd'
     if ($npmCmd) { return $npmCmd }
@@ -447,7 +454,7 @@ function Test-PackageInstalled {
         [Parameter(Mandatory = $true)][string]$PackageName
     )
 
-    $packagePath = Join-Path $PackagesDir ("node_modules\$PackageName")
+    $packagePath = Join-Path $PackagesDir (Join-Path 'node_modules' $PackageName)
     return (Test-Path -LiteralPath $packagePath)
 }
 
@@ -458,15 +465,15 @@ function Assert-PackageInstalled {
     )
 
     if (-not (Test-PackageInstalled -PackagesDir $PackagesDir -PackageName $PackageName)) {
-        throw "Package missing after npm install: $PackageName"
+        throw "Package '$PackageName' was not installed under '$PackagesDir'."
     }
 }
 
-try {
-    if (-not $IsWindowsPlatform) {
-        throw 'This standalone script is intended for Windows.'
-    }
+if (-not $IsWindows) {
+    throw 'This global script is intended for Windows.'
+}
 
+try {
     Ensure-Directory -Path $InstallRoot
     $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
 
@@ -479,13 +486,15 @@ try {
     $PackagesManifestPath = Join-Path $PackagesDir 'package.json'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
     $ReadmePath = Join-Path $ResolvedInstallRoot 'README-pi-stack.txt'
-    $InstallLogPath = Join-Path $LogsDir ("standalone-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+    $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
     Ensure-Directory -Path $PiDir
     Ensure-Directory -Path $PackagesDir
     Ensure-Directory -Path $ScriptsDir
     Ensure-Directory -Path $LogsDir
     Ensure-Directory -Path $BackupsDir
+    Ensure-Directory -Path $GlobalPiAgentDir
+    Ensure-Directory -Path $GlobalPiAgentBackupsDir
 
     try {
         Start-Transcript -Path $InstallLogPath -Force | Out-Null
@@ -496,44 +505,30 @@ try {
     }
 
     Write-Info "Install target: $ResolvedInstallRoot"
+    Write-Info "Global Pi settings: $GlobalPiAgentSettingsPath"
     Write-Info "Install log: $InstallLogPath"
 
     Write-Step 'Checking and installing prerequisites'
     $nodePath = Ensure-Command -Name 'node' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'Node.js LTS'
-    [void](Ensure-Command -Name 'npm' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'npm')
     $npmExe = Get-NpmExecutable
     if (-not $npmExe) {
-        throw 'Could not resolve npm.'
+        throw 'npm was not found after installing Node.js.'
+    }
+    $gitPath = Ensure-Command -Name 'git' -WingetPackageId 'Git.Git' -DisplayName 'Git for Windows'
+    $gitBashPath = Get-GitBashPath
+    if (-not $gitBashPath) {
+        throw 'Git Bash (bash.exe) was not found after installing Git for Windows.'
+    }
+
+    $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
+    if (-not $pythonPath) {
+        $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3' -Optional:$(-not $RequirePython)
     }
 
     Write-Host "node: $(& $nodePath --version)"
     Write-Host "npm:  $(& $npmExe --version)"
-
-    $gitBashPath = Get-GitBashPath
-    if (-not $gitBashPath) {
-        [void](Ensure-Command -Name 'git' -WingetPackageId 'Git.Git' -DisplayName 'Git for Windows')
-        $gitBashPath = Get-GitBashPath
-    }
-
-    if (-not $gitBashPath) {
-        throw 'No bash shell found. Pi needs Git Bash or another bash.exe on Windows.'
-    }
+    Write-Host "git:  $(& $gitPath --version)"
     Write-Host "bash: $gitBashPath"
-
-    $pythonPath = Get-CommandPathSafe -Name 'py'
-    if (-not $pythonPath) {
-        $pythonPath = Get-CommandPathSafe -Name 'python'
-    }
-    if (-not $pythonPath) {
-        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3' -Optional:(-not $RequirePython)
-        if (-not $pythonPath) {
-            $pythonPath = Get-CommandPathSafe -Name 'python'
-        }
-    }
-
-    if ($RequirePython -and -not $pythonPath) {
-        throw 'Python is required but could not be installed or found.'
-    }
 
     if ($pythonPath) {
         try {
@@ -587,7 +582,7 @@ try {
         Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName 'pi-twincat-ads'
     }
 
-    Write-Step 'Writing .pi/settings.json'
+    Write-Step 'Writing install-root and global Pi settings'
     $packagePaths = @(
         '../.pi-packages/node_modules/pi-subagents',
         '../.pi-packages/node_modules/pi-mcp-adapter',
@@ -595,17 +590,40 @@ try {
         '../.pi-packages/node_modules/pi-web-access',
         '../.pi-packages/node_modules/mempalace-pi'
     )
+    $globalPackagePaths = @(
+        (Join-Path $PackagesDir 'node_modules\pi-subagents'),
+        (Join-Path $PackagesDir 'node_modules\pi-mcp-adapter'),
+        (Join-Path $PackagesDir 'node_modules\pi-lens'),
+        (Join-Path $PackagesDir 'node_modules\pi-web-access'),
+        (Join-Path $PackagesDir 'node_modules\mempalace-pi')
+    )
     if ($IncludeTwinCATAds) {
         $packagePaths += '../.pi-packages/node_modules/pi-twincat-ads'
+        $globalPackagePaths += (Join-Path $PackagesDir 'node_modules\pi-twincat-ads')
     }
 
-    $settings = [ordered]@{
+    $installRootSettings = [ordered]@{
         npmCommand = @($npmExe)
         shellPath  = $gitBashPath
         packages   = $packagePaths
         sessionDir = '.pi/sessions'
     }
-    Save-JsonObject -Path $SettingsPath -Data $settings
+    Save-JsonObject -Path $SettingsPath -Data $installRootSettings
+
+    if (Test-Path -LiteralPath $GlobalPiAgentSettingsPath) {
+        $globalSettingsBackupPath = Join-Path $GlobalPiAgentBackupsDir ('settings-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json.bak')
+        Copy-Item -LiteralPath $GlobalPiAgentSettingsPath -Destination $globalSettingsBackupPath -Force
+        Write-Info "Global Pi settings backup: $globalSettingsBackupPath"
+    }
+
+    $globalSettings = Load-JsonObject -Path $GlobalPiAgentSettingsPath
+    $globalSettings['npmCommand'] = @($npmExe)
+    $globalSettings['shellPath'] = $gitBashPath
+    if (-not $globalSettings.ContainsKey('sessionDir') -or [string]::IsNullOrWhiteSpace([string]$globalSettings['sessionDir'])) {
+        $globalSettings['sessionDir'] = '.pi/sessions'
+    }
+    $globalSettings['packages'] = Merge-UniqueStrings -Existing $globalSettings['packages'] -Incoming $globalPackagePaths
+    Save-JsonObject -Path $GlobalPiAgentSettingsPath -Data $globalSettings
 
     Write-Step 'Writing start script'
     $startScript = @"
@@ -632,7 +650,7 @@ if (-not `$piCmdPath) {
 }
 
 if (-not `$piCmdPath) {
-    throw 'pi was not found. Please run install-pi-stack-standalone.ps1 first.'
+    throw 'pi was not found. Please run install-pi-stack-global.ps1 first.'
 }
 
 & `$piCmdPath @PiArgs
@@ -640,12 +658,12 @@ exit `$LASTEXITCODE
 "@
     Set-Content -LiteralPath $StartScriptPath -Value $startScript -Encoding UTF8
 
-    Write-Step 'Writing standalone README'
+    Write-Step 'Writing global README'
     $readme = @'
 Pi Setup Stack
 ==============
 
-This standalone Pi stack has been set up successfully.
+This global Pi stack has been set up successfully.
 
 Installation directory:
 __INSTALL_ROOT__
@@ -654,8 +672,9 @@ What is included
 ----------------
 
 - global @mariozechner/pi-coding-agent
-- local Pi extensions in .pi-packages
-- project-local Pi settings in .pi\settings.json
+- centrally installed Pi extensions in .pi-packages
+- global Pi settings in %USERPROFILE%\.pi\agent\settings.json
+- install-root Pi settings in .pi\settings.json
 - Windows start script in scripts\start-pi.ps1
 - install logs in .pi\logs\
 
@@ -672,6 +691,8 @@ Recommended start command
 
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 
+This installer also updates the global Pi settings so the extensions are available in other repos and in editors that use the global Pi configuration.
+
 Why use the start script?
 -------------------------
 
@@ -687,11 +708,11 @@ If something goes wrong
 
 1. Check the latest file in .pi\logs\
 2. Verify that pi, node, npm, and git are available
-3. Confirm that Git Bash exists and that .pi\settings.json points to a valid bash.exe
+3. Confirm that Git Bash exists and that both .pi\settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
 4. If Python-based features fail, verify that Python is installed and callable via py or python
 
-Installed local packages
-------------------------
+Installed packages
+------------------
 
 - pi-subagents
 - pi-mcp-adapter
@@ -702,25 +723,31 @@ Installed local packages
     $readme = $readme.Replace('__INSTALL_ROOT__', $ResolvedInstallRoot)
     Set-Content -LiteralPath $ReadmePath -Value $readme -Encoding UTF8
 
-    Write-Step 'Validating local package paths'
+    Write-Step 'Validating package paths'
     foreach ($packagePath in $packagePaths) {
         $resolvedPath = Resolve-Path -LiteralPath (Join-Path $PiDir $packagePath) -ErrorAction Stop
-        Write-Info "OK: $resolvedPath"
+        Write-Info "Install-root OK: $resolvedPath"
+    }
+    foreach ($packagePath in $globalPackagePaths) {
+        $resolvedPath = Resolve-Path -LiteralPath $packagePath -ErrorAction Stop
+        Write-Info "Global OK: $resolvedPath"
     }
 
     Write-Step 'Done'
-    Write-Host 'Standalone installation prepared successfully.' -ForegroundColor Green
-    Write-Host "Target folder: $ResolvedInstallRoot"
+    Write-Host 'Global installation prepared successfully.' -ForegroundColor Green
+    Write-Host "Install root: $ResolvedInstallRoot"
+    Write-Host "Global Pi settings: $GlobalPiAgentSettingsPath"
     Write-Host "Log file: $InstallLogPath"
     Write-Host ''
     Write-Host 'Start with:'
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
+    Write-Host 'Or start pi from another repo/editor; the global Pi settings were updated as well.'
 }
 catch {
     $ScriptExitCode = 1
     Write-ErrorLine $_.Exception.Message
     if ($ResolvedInstallRoot) {
-        Write-Host "Target folder: $ResolvedInstallRoot" -ForegroundColor Yellow
+        Write-Host "Install root: $ResolvedInstallRoot" -ForegroundColor Yellow
     }
 }
 finally {

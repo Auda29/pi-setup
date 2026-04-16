@@ -2,24 +2,24 @@
 
 ## TL;DR
 
-- Run `scripts/install-pi-stack.ps1` if you want to install the Pi stack **inside this repo**.
-- Run `scripts/install-pi-stack-standalone.ps1` if you want to create a **separate standalone Pi folder**.
+- Run `scripts/install-pi-stack.ps1` if you want to install the Pi stack **into the repo/folder you run it from**.
+- Run `scripts/install-pi-stack-global.ps1` if you want a **global Pi setup** for all repos/editors.
 - Start Pi on Windows via `scripts/start-pi.ps1` to get the recommended Python UTF-8 environment variables.
 - If something breaks, use `scripts/repair-pi-stack.ps1`.
 - If you want to remove the local setup again, use `scripts/uninstall-pi-stack.ps1`.
 
-Quick start inside this repo:
+Quick start for the current repo/folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-Quick standalone setup:
+Quick global setup:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
-powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1
+powershell -ExecutionPolicy Bypass -File $HOME\.pi-stack\scripts\start-pi.ps1
 ```
 
 ## Overview
@@ -28,8 +28,8 @@ Robust Windows setup for your Pi stack with these components:
 
 There are now two variants:
 
-- **project-local in this repo** via `scripts/install-pi-stack.ps1`
-- **standalone in a target folder** via `scripts/install-pi-stack-standalone.ps1`
+- **project-local in the folder/repo where you run the installer** via `scripts/install-pi-stack.ps1`
+- **global across repos/editors** via `scripts/install-pi-stack-global.ps1`
 
 Stack components:
 
@@ -45,7 +45,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 
 ## What the setup does
 
-`scripts/install-pi-stack.ps1` does the following:
+`scripts/install-pi-stack.ps1` does the following in the folder/repo you run it from:
 
 1. checks whether it is running on Windows
 2. installs missing prerequisites via `winget` when possible
@@ -82,9 +82,9 @@ If `winget` is missing, you must install missing prerequisites manually.
 
 ## Quick start
 
-### Project-local in this repo
+### Project-local in the current repo/folder
 
-Inside the project directory:
+Inside the target project directory:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
@@ -96,21 +96,20 @@ Then start Pi with:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-### Standalone in a separate target folder
+### Global across repos/editors
 
-If you do not want to use this repo itself as the installation target and instead want to create a new folder:
+If you want one central Pi stack that is available via the global Pi settings:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1
 ```
 
 Optional with your own target folder:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
 ```
 
-The script creates a runnable Pi stack there and also writes a short `README-pi-stack.txt` into the target folder.
 
 ## Recommended way to start Pi on Windows
 
@@ -145,7 +144,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -Require
 
 ### Use latest package versions instead of pinned versions
 
-By default, this repo uses pinned versions for better reproducibility.
+By default, this setup uses pinned versions for better reproducibility.
 
 If you intentionally want to use `latest` instead:
 
@@ -206,8 +205,8 @@ This makes it more likely to survive:
 
 ## Important files
 
-- `scripts/install-pi-stack.ps1` - bootstrap/installer for this repo
-- `scripts/install-pi-stack-standalone.ps1` - creates a separate, ready-to-run Pi stack in a target folder
+- `scripts/install-pi-stack.ps1` - bootstrap/installer for the current repo or folder
+- `scripts/install-pi-stack-global.ps1` - installs a global Pi stack and updates the global Pi settings
 - `scripts/start-pi.ps1` - recommended Windows start script
 - `scripts/repair-pi-stack.ps1` - repair an existing setup
 - `scripts/uninstall-pi-stack.ps1` - remove the project-local setup
@@ -276,15 +275,16 @@ This repo uses **local package paths** in `.pi/settings.json`, for example:
 
 That makes the stack project-local, versionable, and easier to understand.
 
-## Standalone installer
+## Global installer
 
-`scripts/install-pi-stack-standalone.ps1` is intended for the case where you want to create a **separate Pi folder** from this repo instead of installing directly into the repo.
+`scripts/install-pi-stack-global.ps1` installs the shared Pi packages into a central folder and also updates the global Pi settings under `%USERPROFILE%\.pi\agent\settings.json`.
 
-The default target is a `pi-stack` subfolder in the current working directory. You can change the target via `-InstallRoot`:
+The default target is `%USERPROFILE%\.pi-stack`. You can change the target via `-InstallRoot`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
 ```
+
 
 Supported extra options mostly match the normal installer:
 
@@ -299,14 +299,14 @@ The target folder will contain, among other things:
 - `scripts\start-pi.ps1`
 - `README-pi-stack.txt`
 
-## Complete standalone workflow example
+## Complete global workflow example
 
-Example: create a standalone Pi stack under `C:\Tools\pi-stack`, verify the generated files, and start Pi.
+Example: create a global Pi stack under `C:\Tools\pi-stack`, verify the generated files, and start Pi.
 
-### 1. Run the standalone installer
+### 1. Run the global installer
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
 ```
 
 ### 2. Inspect the generated files
@@ -317,7 +317,7 @@ Get-ChildItem C:\Tools\pi-stack\scripts
 Get-Content C:\Tools\pi-stack\README-pi-stack.txt
 ```
 
-### 3. Start Pi from the standalone folder
+### 3. Start Pi from the global install folder
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
@@ -326,7 +326,7 @@ powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
 ### 4. Optional: install with Python required and latest package versions
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 `
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -InstallRoot C:\Tools\pi-stack `
   -RequirePython `
   -UseLatestPackageVersions
@@ -335,7 +335,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.p
 ### 5. Optional: include a local `pi-twincat-ads`
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 `
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -InstallRoot C:\Tools\pi-stack `
   -IncludeTwinCATAds `
   -TwinCATAdsSource ..\pi-twincat-ads
@@ -349,6 +349,12 @@ If a setup is half-broken, dependencies are missing, or local npm artifacts are 
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
+```
+
+The repair script targets the repo/folder you run it from. You can also point it at a specific repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ProjectRoot C:\path\to\repo
 ```
 
 With a hard reset of local npm artifacts:
@@ -371,6 +377,12 @@ Remove the project-local Pi stack:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1
+```
+
+The uninstall script targets the repo/folder you run it from. You can also point it at a specific repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1 -ProjectRoot C:\path\to\repo
 ```
 
 Also remove global Pi:
@@ -415,7 +427,7 @@ When reporting problems, it helps to include:
 - the exact command you ran
 - the full error message
 - the log file path
-- whether you used the project-local or standalone installer
+- whether you used the project-local or global installer
 - whether `-RequirePython`, `-UseLatestPackageVersions`, or `-IncludeTwinCATAds` was used
 
 ## Contributing

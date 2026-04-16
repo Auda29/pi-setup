@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [string]$ProjectRoot = (Get-Location).Path,
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
@@ -10,10 +11,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
-$PackagesDir = Join-Path $ProjectRoot '.pi-packages'
-$PiDir = Join-Path $ProjectRoot '.pi'
+$InstallerScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
+$PiDir = Join-Path $ResolvedProjectRoot '.pi'
 $LogsDir = Join-Path $PiDir 'logs'
 $RepairLogPath = Join-Path $LogsDir ("repair-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 $TranscriptStarted = $false
@@ -105,6 +106,7 @@ try {
         Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
+    Write-Info "Project root: $ResolvedProjectRoot"
     Write-Info "Repair log: $RepairLogPath"
 
     if ($ForceCleanNodeModules) {
@@ -122,12 +124,12 @@ try {
     }
 
     Write-Step 'Re-running installer in repair mode'
-    $installScript = Join-Path $ScriptDir 'install-pi-stack.ps1'
+    $installScript = Join-Path $InstallerScriptDir 'install-pi-stack.ps1'
     if (-not (Test-Path -LiteralPath $installScript)) {
         throw "Install script is missing: $installScript"
     }
 
-    $arguments = @('-ExecutionPolicy', 'Bypass', '-File', $installScript)
+    $arguments = @('-ExecutionPolicy', 'Bypass', '-File', $installScript, '-ProjectRoot', $ResolvedProjectRoot)
     if ($IncludeTwinCATAds) {
         $arguments += '-IncludeTwinCATAds'
         if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
@@ -139,7 +141,7 @@ try {
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }
 
     Invoke-WithRetry -Description 'Re-running install script' -Action {
-        Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ProjectRoot
+        Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ResolvedProjectRoot
     } -MaxAttempts 2 -DelaySeconds 5
 
     Write-Step 'Done'
