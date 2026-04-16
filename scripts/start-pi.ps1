@@ -21,7 +21,7 @@ if (-not $piCmdPath) {
 }
 
 if (-not $piCmdPath) {
-    throw 'pi wurde nicht gefunden. Bitte zuerst scripts/install-pi-stack.ps1 ausfuehren.'
+    throw 'pi was not found. Please run scripts/install-pi-stack.ps1 first.'
 }
 
 & $piCmdPath @PiArgs

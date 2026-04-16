@@ -61,7 +61,7 @@ function Invoke-External {
         & $FilePath @Arguments
         $exitCode = $LASTEXITCODE
         if ($exitCode -ne 0) {
-            throw "Befehl fehlgeschlagen ($exitCode): $FilePath $($Arguments -join ' ')"
+            throw "Command failed ($exitCode): $FilePath $($Arguments -join ' ')"
         }
     }
     finally {
@@ -81,13 +81,13 @@ function Invoke-WithRetry {
     while ($attempt -lt $MaxAttempts) {
         $attempt++
         try {
-            Write-Info "$Description (Versuch $attempt/$MaxAttempts)"
+            Write-Info "$Description (attempt $attempt/$MaxAttempts)"
             & $Action
             return
         }
         catch {
             if ($attempt -ge $MaxAttempts) { throw }
-            Write-Warning "$Description fehlgeschlagen: $($_.Exception.Message)"
+            Write-Warning "$Description failed: $($_.Exception.Message)"
             Start-Sleep -Seconds $DelaySeconds
         }
     }
@@ -102,54 +102,54 @@ try {
         $TranscriptStarted = $true
     }
     catch {
-        Write-Warning "Konnte kein Transcript starten: $($_.Exception.Message)"
+        Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
-    Write-Info "Repair-Log: $RepairLogPath"
+    Write-Info "Repair log: $RepairLogPath"
 
     if ($ForceCleanNodeModules) {
-        Write-Step 'Bereinige defekte lokale npm-Artefakte'
+        Write-Step 'Cleaning broken local npm artifacts'
         $nodeModulesPath = Join-Path $PackagesDir 'node_modules'
         $packageLockPath = Join-Path $PackagesDir 'package-lock.json'
         if (Test-Path -LiteralPath $nodeModulesPath) {
             Remove-Item -LiteralPath $nodeModulesPath -Recurse -Force
-            Write-Info "Entfernt: $nodeModulesPath"
+            Write-Info "Removed: $nodeModulesPath"
         }
         if (Test-Path -LiteralPath $packageLockPath) {
             Remove-Item -LiteralPath $packageLockPath -Force
-            Write-Info "Entfernt: $packageLockPath"
+            Write-Info "Removed: $packageLockPath"
         }
     }
 
-    Write-Step 'Fuehre Installer im Repair-Modus erneut aus'
+    Write-Step 'Re-running installer in repair mode'
     $installScript = Join-Path $ScriptDir 'install-pi-stack.ps1'
     if (-not (Test-Path -LiteralPath $installScript)) {
-        throw "Install-Script fehlt: $installScript"
+        throw "Install script is missing: $installScript"
     }
 
     $arguments = @('-ExecutionPolicy', 'Bypass', '-File', $installScript)
     if ($IncludeTwinCATAds) {
         $arguments += '-IncludeTwinCATAds'
         if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-            throw 'Wenn -IncludeTwinCATAds gesetzt ist, muss auch -TwinCATAdsSource angegeben werden.'
+            throw 'If -IncludeTwinCATAds is set, -TwinCATAdsSource must also be provided.'
         }
         $arguments += @('-TwinCATAdsSource', $TwinCATAdsSource)
     }
     if ($RequirePython) { $arguments += '-RequirePython' }
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }
 
-    Invoke-WithRetry -Description 'Install-Script erneut ausfuehren' -Action {
+    Invoke-WithRetry -Description 'Re-running install script' -Action {
         Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ProjectRoot
     } -MaxAttempts 2 -DelaySeconds 5
 
-    Write-Step 'Fertig'
-    Write-Host 'Repair erfolgreich abgeschlossen.' -ForegroundColor Green
-    Write-Host "Logdatei: $RepairLogPath"
+    Write-Step 'Done'
+    Write-Host 'Repair completed successfully.' -ForegroundColor Green
+    Write-Host "Log file: $RepairLogPath"
 }
 catch {
     $ScriptExitCode = 1
     Write-ErrorLine $_.Exception.Message
-    Write-Host "Logdatei: $RepairLogPath" -ForegroundColor Yellow
+    Write-Host "Log file: $RepairLogPath" -ForegroundColor Yellow
 }
 finally {
     if ($TranscriptStarted) {

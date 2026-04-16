@@ -81,7 +81,7 @@ function Invoke-External {
         & $FilePath @Arguments
         $exitCode = $LASTEXITCODE
         if ($exitCode -ne 0) {
-            throw "Befehl fehlgeschlagen ($exitCode): $FilePath $($Arguments -join ' ')"
+            throw "Command failed ($exitCode): $FilePath $($Arguments -join ' ')"
         }
     }
     finally {
@@ -101,14 +101,14 @@ function Invoke-WithRetry {
     while ($attempt -lt $MaxAttempts) {
         $attempt++
         try {
-            Write-Info "$Description (Versuch $attempt/$MaxAttempts)"
+            Write-Info "$Description (attempt $attempt/$MaxAttempts)"
             & $Action
             return
         }
         catch {
             if ($attempt -ge $MaxAttempts) { throw }
-            Write-Warning "$Description fehlgeschlagen: $($_.Exception.Message)"
-            Write-Info "Warte $DelaySeconds Sekunden vor dem naechsten Versuch ..."
+            Write-Warning "$Description failed: $($_.Exception.Message)"
+            Write-Info "Waiting $DelaySeconds seconds before the next attempt ..."
             Start-Sleep -Seconds $DelaySeconds
         }
     }
@@ -122,10 +122,10 @@ function Invoke-WingetInstall {
 
     $winget = Get-CommandPathSafe -Name 'winget'
     if (-not $winget) {
-        throw "'$DisplayName' fehlt und winget ist nicht verfuegbar. Bitte installiere es manuell."
+        throw "'$DisplayName' is missing and winget is not available. Please install it manually."
     }
 
-    Write-Step "Installiere $DisplayName ueber winget"
+    Write-Step "Installing $DisplayName via winget"
     Invoke-WithRetry -Description "winget install $PackageId" -Action {
         Invoke-External -FilePath $winget -Arguments @(
             'install', '--id', $PackageId, '--exact', '--silent',
@@ -165,11 +165,11 @@ function Ensure-Command {
     }
 
     if ($Optional) {
-        Write-Warning "'$DisplayName' wurde nicht gefunden."
+        Write-Warning "'$DisplayName' was not found."
         return $null
     }
 
-    throw "'$DisplayName' wurde nicht gefunden."
+    throw "'$DisplayName' was not found."
 }
 
 function Save-JsonObject {
@@ -246,13 +246,13 @@ function Assert-PackageInstalled {
     )
 
     if (-not (Test-PackageInstalled -PackagesDir $PackagesDir -PackageName $PackageName)) {
-        throw "Package fehlt nach npm install: $PackageName"
+        throw "Package missing after npm install: $PackageName"
     }
 }
 
 try {
     if (-not $IsWindows) {
-        throw 'Dieses Standalone-Script ist fuer Windows gedacht.'
+        throw 'This standalone script is intended for Windows.'
     }
 
     Ensure-Directory -Path $InstallRoot
@@ -280,18 +280,18 @@ try {
         $TranscriptStarted = $true
     }
     catch {
-        Write-Warning "Konnte kein Transcript starten: $($_.Exception.Message)"
+        Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
-    Write-Info "Install-Ziel: $ResolvedInstallRoot"
-    Write-Info "Install-Log: $InstallLogPath"
+    Write-Info "Install target: $ResolvedInstallRoot"
+    Write-Info "Install log: $InstallLogPath"
 
-    Write-Step 'Pruefe bzw. installiere Voraussetzungen'
+    Write-Step 'Checking and installing prerequisites'
     $nodePath = Ensure-Command -Name 'node' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'Node.js LTS'
     [void](Ensure-Command -Name 'npm' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'npm')
     $npmExe = Get-NpmExecutable
     if (-not $npmExe) {
-        throw 'npm konnte nicht aufgeloest werden.'
+        throw 'Could not resolve npm.'
     }
 
     Write-Host "node: $(& $nodePath --version)"
@@ -304,7 +304,7 @@ try {
     }
 
     if (-not $gitBashPath) {
-        throw 'Keine bash-Shell gefunden. Pi braucht unter Windows Git Bash oder eine andere bash.exe.'
+        throw 'No bash shell found. Pi needs Git Bash or another bash.exe on Windows.'
     }
     Write-Host "bash: $gitBashPath"
 
@@ -320,7 +320,7 @@ try {
     }
 
     if ($RequirePython -and -not $pythonPath) {
-        throw 'Python ist erforderlich, konnte aber nicht installiert oder gefunden werden.'
+        throw 'Python is required but could not be installed or found.'
     }
 
     if ($pythonPath) {
@@ -328,14 +328,14 @@ try {
             Write-Host "python: $(& $pythonPath --version 2>&1)"
         }
         catch {
-            Write-Warning "Python gefunden, aber Version konnte nicht gelesen werden: $($_.Exception.Message)"
+            Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
         }
     }
     else {
-        Write-Warning 'Python wurde nicht gefunden. mempalace-pi kann spaeter eine manuelle Python-Installation benoetigen.'
+        Write-Warning 'Python was not found. mempalace-pi may require a manual Python installation later.'
     }
 
-    Write-Step 'Installiere oder aktualisiere pi-coding-agent global'
+    Write-Step 'Installing or updating pi-coding-agent globally'
     Invoke-WithRetry -Description 'npm install -g @mariozechner/pi-coding-agent' -Action {
         Invoke-External -FilePath $npmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
     } -MaxAttempts 3 -DelaySeconds 5
@@ -343,21 +343,21 @@ try {
 
     $piExe = Get-PiExecutable
     if (-not $piExe) {
-        throw 'pi wurde nach dem globalen npm-Install nicht gefunden.'
+        throw 'pi was not found after the global npm install.'
     }
     Write-Host "pi:   $(& $piExe --version)"
 
-    Write-Step 'Erzeuge lokale Paketdefinition'
+    Write-Step 'Creating local package manifest'
     $manifest = [ordered]@{
         name         = 'pi-setup-stack'
         private      = $true
-        description  = 'Lokaler Pi-Stack fuer dieses Projekt'
+        description  = 'Local Pi stack for this project'
         dependencies = (Get-DependencyMap)
     }
     Save-JsonObject -Path $PackagesManifestPath -Data $manifest
 
-    Write-Step 'Installiere lokale Pi-Packages per npm'
-    Invoke-WithRetry -Description 'npm install fuer .pi-packages' -Action {
+    Write-Step 'Installing local Pi packages via npm'
+    Invoke-WithRetry -Description 'npm install for .pi-packages' -Action {
         Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', '--no-fund', '--no-audit')
     } -MaxAttempts 3 -DelaySeconds 5
 
@@ -367,18 +367,18 @@ try {
 
     if ($IncludeTwinCATAds) {
         if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-            throw 'Wenn -IncludeTwinCATAds gesetzt ist, muss auch -TwinCATAdsSource angegeben werden.'
+            throw 'If -IncludeTwinCATAds is set, -TwinCATAdsSource must also be provided.'
         }
 
         $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
-        Write-Step 'Installiere pi-twincat-ads aus lokalem Pfad'
+        Write-Step 'Installing pi-twincat-ads from local path'
         Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
             Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
         } -MaxAttempts 3 -DelaySeconds 5
         Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName 'pi-twincat-ads'
     }
 
-    Write-Step 'Schreibe .pi/settings.json'
+    Write-Step 'Writing .pi/settings.json'
     $packagePaths = @(
         '../.pi-packages/node_modules/pi-subagents',
         '../.pi-packages/node_modules/pi-mcp-adapter',
@@ -398,7 +398,7 @@ try {
     }
     Save-JsonObject -Path $SettingsPath -Data $settings
 
-    Write-Step 'Schreibe Startskript'
+    Write-Step 'Writing start script'
     $startScript = @"
 param(
     [Parameter(ValueFromRemainingArguments = `$true)]
@@ -423,7 +423,7 @@ if (-not `$piCmdPath) {
 }
 
 if (-not `$piCmdPath) {
-    throw 'pi wurde nicht gefunden. Bitte zuerst install-pi-stack-standalone.ps1 ausfuehren.'
+    throw 'pi was not found. Please run install-pi-stack-standalone.ps1 first.'
 }
 
 & `$piCmdPath @PiArgs
@@ -431,42 +431,87 @@ exit `$LASTEXITCODE
 "@
     Set-Content -LiteralPath $StartScriptPath -Value $startScript -Encoding UTF8
 
-    Write-Step 'Schreibe Kurzbeschreibung'
-    $readme = @"
-Pi-Stack wurde erfolgreich eingerichtet.
+    Write-Step 'Writing standalone README'
+    $readme = @'
+Pi Setup Stack
+==============
 
-Installationsordner:
-$ResolvedInstallRoot
+This standalone Pi stack has been set up successfully.
 
-Wichtige Dateien:
+Installation directory:
+__INSTALL_ROOT__
+
+What is included
+----------------
+
+- global @mariozechner/pi-coding-agent
+- local Pi extensions in .pi-packages
+- project-local Pi settings in .pi\settings.json
+- Windows start script in scripts\start-pi.ps1
+- install logs in .pi\logs\
+
+Important files
+---------------
+
 - .pi\settings.json
 - .pi-packages\package.json
 - scripts\start-pi.ps1
+- .pi\logs\
 
-Start:
+Recommended start command
+-------------------------
+
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
-"@
+
+Why use the start script?
+-------------------------
+
+The start script sets these environment variables for the current session:
+
+- PYTHONUTF8=1
+- PYTHONIOENCODING=utf-8
+
+That is especially useful on Windows, in particular for mempalace-pi.
+
+If something goes wrong
+-----------------------
+
+1. Check the latest file in .pi\logs\
+2. Verify that pi, node, npm, and git are available
+3. Confirm that Git Bash exists and that .pi\settings.json points to a valid bash.exe
+4. If Python-based features fail, verify that Python is installed and callable via py or python
+
+Installed local packages
+------------------------
+
+- pi-subagents
+- pi-mcp-adapter
+- pi-lens
+- pi-web-access
+- mempalace-pi
+'@
+    $readme = $readme.Replace('__INSTALL_ROOT__', $ResolvedInstallRoot)
     Set-Content -LiteralPath $ReadmePath -Value $readme -Encoding UTF8
 
-    Write-Step 'Validiere lokale Paketpfade'
+    Write-Step 'Validating local package paths'
     foreach ($packagePath in $packagePaths) {
         $resolvedPath = Resolve-Path -LiteralPath (Join-Path $PiDir $packagePath) -ErrorAction Stop
         Write-Info "OK: $resolvedPath"
     }
 
-    Write-Step 'Fertig'
-    Write-Host 'Standalone-Installation erfolgreich vorbereitet.' -ForegroundColor Green
-    Write-Host "Zielordner: $ResolvedInstallRoot"
-    Write-Host "Logdatei: $InstallLogPath"
+    Write-Step 'Done'
+    Write-Host 'Standalone installation prepared successfully.' -ForegroundColor Green
+    Write-Host "Target folder: $ResolvedInstallRoot"
+    Write-Host "Log file: $InstallLogPath"
     Write-Host ''
-    Write-Host 'Starten mit:'
+    Write-Host 'Start with:'
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
 }
 catch {
     $ScriptExitCode = 1
     Write-ErrorLine $_.Exception.Message
     if ($ResolvedInstallRoot) {
-        Write-Host "Zielordner: $ResolvedInstallRoot" -ForegroundColor Yellow
+        Write-Host "Target folder: $ResolvedInstallRoot" -ForegroundColor Yellow
     }
 }
 finally {

@@ -71,7 +71,7 @@ function Invoke-External {
         & $FilePath @Arguments
         $exitCode = $LASTEXITCODE
         if ($exitCode -ne 0) {
-            throw "Befehl fehlgeschlagen ($exitCode): $FilePath $($Arguments -join ' ')"
+            throw "Command failed ($exitCode): $FilePath $($Arguments -join ' ')"
         }
     }
     finally {
@@ -83,13 +83,13 @@ function Remove-PathSafe {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        Write-Info "Uebersprungen, nicht vorhanden: $Path"
+        Write-Info "Skipped, not present: $Path"
         return
     }
 
     if ($PSCmdlet.ShouldProcess($Path, 'Remove')) {
         Remove-Item -LiteralPath $Path -Recurse -Force
-        Write-Info "Entfernt: $Path"
+        Write-Info "Removed: $Path"
     }
 }
 
@@ -102,19 +102,19 @@ try {
         $TranscriptStarted = $true
     }
     catch {
-        Write-Warning "Konnte kein Transcript starten: $($_.Exception.Message)"
+        Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
-    Write-Info "Uninstall-Log: $UninstallLogPath"
+    Write-Info "Uninstall log: $UninstallLogPath"
 
-    Write-Step 'Entferne lokale Pi-Packages'
+    Write-Step 'Removing local Pi packages'
     Remove-PathSafe -Path $PackagesDir
 
-    Write-Step 'Entferne projektlokale Pi-Dateien'
+    Write-Step 'Removing project-local Pi files'
     if (-not $KeepSettings) {
         Remove-PathSafe -Path $SettingsPath
     } else {
-        Write-Info 'Behalte .pi/settings.json'
+        Write-Info 'Keeping .pi/settings.json'
     }
 
     Remove-PathSafe -Path $StartScriptPath
@@ -122,7 +122,7 @@ try {
     if (-not $KeepBackups) {
         Remove-PathSafe -Path $BackupsDir
     } else {
-        Write-Info 'Behalte .pi/backups/'
+        Write-Info 'Keeping .pi/backups/'
     }
 
     if (-not $KeepLogs) {
@@ -131,41 +131,41 @@ try {
             Get-ChildItem -LiteralPath $LogsDir -File | Where-Object { $_.FullName -ne $keepCurrentLog } | ForEach-Object {
                 if ($PSCmdlet.ShouldProcess($_.FullName, 'Remove')) {
                     Remove-Item -LiteralPath $_.FullName -Force
-                    Write-Info "Entfernt: $($_.FullName)"
+                    Write-Info "Removed: $($_.FullName)"
                 }
             }
         }
     } else {
-        Write-Info 'Behalte .pi/logs/'
+        Write-Info 'Keeping .pi/logs/'
     }
 
     if ($RemoveGlobalPi) {
-        Write-Step 'Entferne globales pi'
+        Write-Step 'Removing global pi'
         $npmExe = Get-NpmExecutable
         if (-not $npmExe) {
-            throw 'npm wurde nicht gefunden. Globales pi kann nicht automatisch entfernt werden.'
+            throw 'npm was not found. Global pi cannot be removed automatically.'
         }
 
         if ($PSCmdlet.ShouldProcess('@mariozechner/pi-coding-agent', 'npm uninstall -g')) {
             Invoke-External -FilePath $npmExe -Arguments @('uninstall', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
         }
     } else {
-        Write-Info 'Globales pi bleibt installiert. Nutze -RemoveGlobalPi zum Entfernen.'
+        Write-Info 'Global pi remains installed. Use -RemoveGlobalPi to remove it.'
     }
 
-    Write-Step 'Bereinige leere Verzeichnisse'
+    Write-Step 'Cleaning empty directories'
     if ((Test-Path -LiteralPath $PiDir) -and -not (Get-ChildItem -LiteralPath $PiDir -Force | Select-Object -First 1)) {
         Remove-PathSafe -Path $PiDir
     }
 
-    Write-Step 'Fertig'
-    Write-Host 'Pi-Stack wurde entfernt.' -ForegroundColor Green
-    Write-Host "Logdatei: $UninstallLogPath"
+    Write-Step 'Done'
+    Write-Host 'Pi stack has been removed.' -ForegroundColor Green
+    Write-Host "Log file: $UninstallLogPath"
 }
 catch {
     $ScriptExitCode = 1
     Write-ErrorLine $_.Exception.Message
-    Write-Host "Logdatei: $UninstallLogPath" -ForegroundColor Yellow
+    Write-Host "Log file: $UninstallLogPath" -ForegroundColor Yellow
 }
 finally {
     if ($TranscriptStarted) {

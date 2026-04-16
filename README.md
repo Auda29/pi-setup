@@ -1,6 +1,37 @@
 # Pi Setup Stack
 
-Robustes Windows-Setup fuer deinen Pi-Stack mit diesen Komponenten:
+## TL;DR
+
+- Run `scripts/install-pi-stack.ps1` if you want to install the Pi stack **inside this repo**.
+- Run `scripts/install-pi-stack-standalone.ps1` if you want to create a **separate standalone Pi folder**.
+- Start Pi on Windows via `scripts/start-pi.ps1` to get the recommended Python UTF-8 environment variables.
+- If something breaks, use `scripts/repair-pi-stack.ps1`.
+- If you want to remove the local setup again, use `scripts/uninstall-pi-stack.ps1`.
+
+Quick start inside this repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
+```
+
+Quick standalone setup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
+```
+
+## Overview
+
+Robust Windows setup for your Pi stack with these components:
+
+There are now two variants:
+
+- **project-local in this repo** via `scripts/install-pi-stack.ps1`
+- **standalone in a target folder** via `scripts/install-pi-stack-standalone.ps1`
+
+Stack components:
 
 - `@mariozechner/pi-coding-agent`
 - `pi-subagents`
@@ -8,105 +39,123 @@ Robustes Windows-Setup fuer deinen Pi-Stack mit diesen Komponenten:
 - `pi-lens`
 - `pi-web-access`
 - `mempalace-pi`
-- optional spaeter `pi-twincat-ads`
+- optionally later `pi-twincat-ads`
 
-Ziel: Ein Setup, das sowohl auf **frischen Windows-Systemen** als auch auf Rechnern mit **bereits vorhandenem Pi** moeglichst reproduzierbar durchlaeuft.
+Goal: a setup that works as reproducibly as possible on both **fresh Windows systems** and machines with an **existing Pi installation**.
 
-## Was das Setup macht
+## What the setup does
 
-`scripts/install-pi-stack.ps1` erledigt folgendes:
+`scripts/install-pi-stack.ps1` does the following:
 
-1. prueft, ob es auf Windows laeuft
-2. installiert fehlende Voraussetzungen wenn moeglich per `winget`
+1. checks whether it is running on Windows
+2. installs missing prerequisites via `winget` when possible
    - Node.js LTS
    - Git for Windows
    - optional Python 3
-3. installiert oder aktualisiert `@mariozechner/pi-coding-agent` global
-4. installiert die Pi-Erweiterungen lokal in `.pi-packages`
-5. schreibt eine robuste `.pi/settings.json`
+3. installs or updates `@mariozechner/pi-coding-agent` globally
+4. installs the Pi extensions locally in `.pi-packages`
+5. writes a robust `.pi/settings.json`
    - `npmCommand`
    - `shellPath`
    - `packages`
    - `sessionDir`
-6. legt Backups bestehender Settings an
-7. erzeugt ein Startskript fuer Windows: `scripts/start-pi.ps1`
-8. schreibt ein Install-Log nach `.pi/logs/`
+6. creates backups of existing settings
+7. creates a Windows start script: `scripts/start-pi.ps1`
+8. writes an install log to `.pi/logs/`
 
-## Warum dieser Ansatz?
+## Why this approach?
 
-Unter Windows ist der direkte Weg ueber `pi install npm:...` nicht immer der nervenschonendste Weg. Deshalb installiert dieses Setup die Erweiterungen **lokal per npm** und bindet sie **ueber lokale Paketpfade** in `.pi/settings.json` ein.
+On Windows, the direct path via `pi install npm:...` is not always the least painful one. This setup therefore installs the extensions **locally via npm** and wires them into `.pi/settings.json` **via local package paths**.
 
-Das ist fuer dein Ziel stabiler, reproduzierbarer und leichter zu debuggen.
+For your use case, that is more stable, more reproducible, and easier to debug.
 
-## Voraussetzungen
+## Requirements
 
-Empfohlen:
+Recommended:
 
-- Windows 11 oder aktuelles Windows 10
-- PowerShell 5.1+ oder PowerShell 7+
-- `winget` verfuegbar
-- Internetzugang fuer `winget` und `npm`
+- Windows 11 or current Windows 10
+- PowerShell 5.1+ or PowerShell 7+
+- `winget` available
+- internet access for `winget` and `npm`
 
-Falls `winget` fehlt, musst du fehlende Voraussetzungen manuell installieren.
+If `winget` is missing, you must install missing prerequisites manually.
 
-## Schnellstart
+## Quick start
 
-Im Projektordner:
+### Project-local in this repo
+
+Inside the project directory:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 ```
 
-Danach Pi starten mit:
+Then start Pi with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-## Empfohlener Start unter Windows
+### Standalone in a separate target folder
 
-Nutze zum Starten von Pi moeglichst dieses Skript:
+If you do not want to use this repo itself as the installation target and instead want to create a new folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1
+```
+
+Optional with your own target folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+```
+
+The script creates a runnable Pi stack there and also writes a short `README-pi-stack.txt` into the target folder.
+
+## Recommended way to start Pi on Windows
+
+Prefer starting Pi via this script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-Das setzt fuer die Session:
+This sets the following for the session:
 
 - `PYTHONUTF8=1`
 - `PYTHONIOENCODING=utf-8`
 
-Das hilft besonders bei `mempalace-pi` unter Windows.
+That is especially helpful for `mempalace-pi` on Windows.
 
-## Optionen des Install-Skripts
+## Installer options
 
-### Standardinstallation
+### Standard installation
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 ```
 
-### Python zwingend verlangen
+### Require Python
 
-Wenn `mempalace-pi` direkt sauber mit vorbereitet werden soll:
+If you want `mempalace-pi` to be prepared cleanly right away:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -RequirePython
 ```
 
-### Neueste statt gepinnter Paketversionen verwenden
+### Use latest package versions instead of pinned versions
 
-Standardmaessig verwendet das Repo gepinnte Versionen fuer mehr Reproduzierbarkeit.
+By default, this repo uses pinned versions for better reproducibility.
 
-Falls du bewusst auf `latest` gehen willst:
+If you intentionally want to use `latest` instead:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UseLatestPackageVersions
 ```
 
-### Lokales `pi-twincat-ads` mit installieren
+### Install local `pi-twincat-ads`
 
-Sobald dein Paket lokal vorliegt:
+As soon as your package exists locally:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
@@ -114,59 +163,62 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
   -TwinCATAdsSource ..\pi-twincat-ads
 ```
 
-## Exit-Codes
+## Exit codes
 
-Das Install-Skript liefert absichtlich einfache Exit-Codes:
+The install script intentionally returns simple exit codes:
 
-- `0` = erfolgreich
-- `1` = Fehler waehrend Installation oder Validierung
+- `0` = success
+- `1` = error during installation or validation
 
-Beispiel fuer CI oder Wrapper-Skripte:
+Example for CI or wrapper scripts:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Installation fehlgeschlagen"
+    Write-Host "Installation failed"
 }
 ```
 
 ## Logging
 
-Jeder Lauf schreibt ein Log nach:
+Each run writes a log to:
 
 ```text
 .pi/logs/install-YYYYMMDD-HHMMSS.log
 ```
 
-Wenn etwas schiefgeht, zuerst dort reinschauen.
+If something goes wrong, check that first.
 
-## Retry-Strategie
+## Retry strategy
 
-Das Skript verwendet Retries fuer die typischen Wackelkandidaten:
+The script uses retries for the usual flaky operations:
 
 - `winget install`
 - `npm install -g @mariozechner/pi-coding-agent`
 - `npm install` in `.pi-packages`
-- optional `npm install` fuer `pi-twincat-ads`
+- optional `npm install` for `pi-twincat-ads`
 
-Damit ueberlebt es eher:
+This makes it more likely to survive:
 
-- kurze Netzwerkprobleme
-- Registry-Zickereien
-- temporaere npm- oder winget-Aussetzer
+- short network issues
+- registry hiccups
+- temporary npm or winget outages
 
-## Wichtige Dateien
+## Important files
 
-- `scripts/install-pi-stack.ps1` - Bootstrap/Installer
-- `scripts/start-pi.ps1` - empfohlener Start unter Windows
-- `.pi-packages/package.json` - lokale Stack-Definition
-- `.pi/settings.json` - projektlokale Pi-Konfiguration
-- `.pi/backups/` - Backups vorhandener Settings
-- `.pi/logs/` - Install-Logs
+- `scripts/install-pi-stack.ps1` - bootstrap/installer for this repo
+- `scripts/install-pi-stack-standalone.ps1` - creates a separate, ready-to-run Pi stack in a target folder
+- `scripts/start-pi.ps1` - recommended Windows start script
+- `scripts/repair-pi-stack.ps1` - repair an existing setup
+- `scripts/uninstall-pi-stack.ps1` - remove the project-local setup
+- `.pi-packages/package.json` - local stack definition
+- `.pi/settings.json` - project-local Pi configuration
+- `.pi/backups/` - backups of existing settings
+- `.pi/logs/` - install/repair/uninstall logs
 
-## Installierte Pakete
+## Installed packages
 
-Standardmaessig gepinnt:
+Pinned by default:
 
 - `pi-subagents` `0.14.1`
 - `pi-mcp-adapter` `2.4.0`
@@ -174,45 +226,45 @@ Standardmaessig gepinnt:
 - `pi-web-access` `0.10.6`
 - `mempalace-pi` `0.2.0`
 
-## Was passiert bei bestehender Pi-Installation?
+## What happens if Pi is already installed?
 
-Genau dafuer ist das Skript gebaut:
+That is exactly what the script is built for:
 
-- vorhandenes `pi` wird nicht blind vorausgesetzt, sondern aktualisiert
-- vorhandene `.pi/settings.json` wird vor dem Ueberschreiben gesichert
-- vorhandene `.pi-packages/package.json` wird ergaenzt statt stumpf zerstoert
-- Paketpfade werden dedupliziert
+- existing `pi` is not blindly assumed, but updated
+- existing `.pi/settings.json` is backed up before being overwritten
+- existing `.pi-packages/package.json` is extended instead of being bluntly destroyed
+- package paths are deduplicated
 
-## Typische Probleme
+## Common issues
 
-### 1. `winget` fehlt
+### 1. `winget` is missing
 
-Dann musst du Node.js, Git for Windows und optional Python manuell installieren.
+Then you have to install Node.js, Git for Windows, and optionally Python manually.
 
-### 2. `pi` wird nach globalem npm-Install nicht gefunden
+### 2. `pi` is not found after global npm install
 
-Pruefe typischerweise:
+Typically check:
 
-- `%APPDATA%\npm` im PATH
-- ob `pi.cmd` unter `%APPDATA%\npm` existiert
+- `%APPDATA%\npm` in PATH
+- whether `pi.cmd` exists under `%APPDATA%\npm`
 
-Das Startskript hat dafuer bereits einen Fallback auf `%APPDATA%\npm\pi.cmd`.
+The start script already includes a fallback to `%APPDATA%\npm\pi.cmd`.
 
-### 3. Git Bash fehlt
+### 3. Git Bash is missing
 
-Pi braucht unter Windows eine Bash-Shell. Das Skript versucht deshalb Git for Windows zu installieren und setzt danach `shellPath` in `.pi/settings.json`.
+Pi needs a Bash shell on Windows. The script therefore tries to install Git for Windows and then sets `shellPath` in `.pi/settings.json`.
 
-### 4. Python-/Encoding-Probleme mit `mempalace-pi`
+### 4. Python or encoding issues with `mempalace-pi`
 
-Nutze zum Starten von Pi immer:
+Always start Pi via:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-## NPM-/Pi-Mechanik
+## NPM / Pi wiring
 
-Dieses Repo nutzt **lokale Paketpfade** in `.pi/settings.json`, also z. B.:
+This repo uses **local package paths** in `.pi/settings.json`, for example:
 
 ```json
 {
@@ -222,25 +274,90 @@ Dieses Repo nutzt **lokale Paketpfade** in `.pi/settings.json`, also z. B.:
 }
 ```
 
-Dadurch ist der Stack projektlokal versionierbar und nachvollziehbar.
+That makes the stack project-local, versionable, and easier to understand.
 
-## Repair und Uninstall
+## Standalone installer
+
+`scripts/install-pi-stack-standalone.ps1` is intended for the case where you want to create a **separate Pi folder** from this repo instead of installing directly into the repo.
+
+The default target is a `pi-stack` subfolder in the current working directory. You can change the target via `-InstallRoot`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+```
+
+Supported extra options mostly match the normal installer:
+
+- `-RequirePython`
+- `-UseLatestPackageVersions`
+- `-IncludeTwinCATAds -TwinCATAdsSource <path>`
+
+The target folder will contain, among other things:
+
+- `.pi\settings.json`
+- `.pi-packages\package.json`
+- `scripts\start-pi.ps1`
+- `README-pi-stack.txt`
+
+## Complete standalone workflow example
+
+Example: create a standalone Pi stack under `C:\Tools\pi-stack`, verify the generated files, and start Pi.
+
+### 1. Run the standalone installer
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 -InstallRoot C:\Tools\pi-stack
+```
+
+### 2. Inspect the generated files
+
+```powershell
+Get-ChildItem C:\Tools\pi-stack
+Get-ChildItem C:\Tools\pi-stack\scripts
+Get-Content C:\Tools\pi-stack\README-pi-stack.txt
+```
+
+### 3. Start Pi from the standalone folder
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
+```
+
+### 4. Optional: install with Python required and latest package versions
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 `
+  -InstallRoot C:\Tools\pi-stack `
+  -RequirePython `
+  -UseLatestPackageVersions
+```
+
+### 5. Optional: include a local `pi-twincat-ads`
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-standalone.ps1 `
+  -InstallRoot C:\Tools\pi-stack `
+  -IncludeTwinCATAds `
+  -TwinCATAdsSource ..\pi-twincat-ads
+```
+
+## Repair and uninstall
 
 ### Repair
 
-Wenn ein Setup halb kaputt ist, Abhaengigkeiten fehlen oder lokale npm-Artefakte beschaedigt sind:
+If a setup is half-broken, dependencies are missing, or local npm artifacts are corrupted:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
 ```
 
-Mit hartem Reset der lokalen npm-Artefakte:
+With a hard reset of local npm artifacts:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCleanNodeModules
 ```
 
-Mit lokalem `pi-twincat-ads`:
+With local `pi-twincat-ads`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
@@ -250,30 +367,82 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
 
 ### Uninstall
 
-Projektlokalen Pi-Stack entfernen:
+Remove the project-local Pi stack:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1
 ```
 
-Auch globales Pi entfernen:
+Also remove global Pi:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1 -RemoveGlobalPi
 ```
 
-Settings, Logs oder Backups behalten:
+Keep settings, logs, or backups:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1 -KeepSettings -KeepLogs -KeepBackups
 ```
 
-Beide Skripte schreiben Logs nach `.pi/logs/`.
+Both scripts write logs to `.pi/logs/`.
 
-## Naechste sinnvolle Schritte
+## License
 
-Wenn du willst, kannst du als Naechstes noch ergaenzen:
+No license has been defined in this repository yet.
 
-- ein Meta-Paket fuer deinen kompletten Stack
-- eine CI-Pruefung fuer das Setup
-- automatische Checks fuer `pi-twincat-ads`
+If you plan to publish or share this setup, add a license file and make the intended usage explicit. Typical choices are:
+
+- `MIT` for a very permissive setup
+- `Apache-2.0` if you want an explicit patent grant
+- `GPL-3.0` if you want copyleft requirements
+
+Until a license is added, treat the repository as "all rights reserved" by default.
+
+## Support
+
+This repository currently does not define a formal support channel.
+
+A practical lightweight support model would be:
+
+- use GitHub Issues for bug reports and setup problems
+- use Discussions for questions and ideas
+- include the relevant log from `.pi/logs/` when reporting an installation issue
+- mention your Windows version, PowerShell version, and whether `winget`, `node`, `npm`, `git`, and `python` are available
+
+When reporting problems, it helps to include:
+
+- the exact command you ran
+- the full error message
+- the log file path
+- whether you used the project-local or standalone installer
+- whether `-RequirePython`, `-UseLatestPackageVersions`, or `-IncludeTwinCATAds` was used
+
+## Contributing
+
+Contributions are welcome.
+
+Suggested workflow:
+
+1. fork the repository
+2. create a feature branch
+3. keep changes focused and small
+4. test the affected PowerShell scripts locally
+5. update `README.md` when behavior or flags change
+6. open a pull request with a short explanation of the change
+
+Good contribution candidates:
+
+- better Windows edge-case handling
+- clearer diagnostics and log output
+- CI validation for the scripts
+- optional support for additional Pi packages
+- documentation improvements and troubleshooting notes
+
+## Reasonable next steps
+
+If you want, the next useful additions could be:
+
+- a meta-package for your complete stack
+- a CI check for the setup
+- automatic checks for `pi-twincat-ads`
