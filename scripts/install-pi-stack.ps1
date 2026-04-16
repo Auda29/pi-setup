@@ -224,6 +224,48 @@ function Invoke-WithRetry {
     }
 }
 
+function Get-PythonCommandSpec {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $leaf = Split-Path -Leaf $PythonPath
+    $baseArguments = @()
+    if ($leaf -ieq 'py.exe' -or $leaf -ieq 'py') {
+        $baseArguments += '-3'
+    }
+
+    return [ordered]@{
+        FilePath      = $PythonPath
+        BaseArguments = $baseArguments
+    }
+}
+
+function Invoke-PythonCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+    $allArguments = @($pythonSpec['BaseArguments']) + @($Arguments)
+    Invoke-External -FilePath $pythonSpec['FilePath'] -Arguments $allArguments -WorkingDirectory $WorkingDirectory
+}
+
+function Install-MemPalacePythonBackend {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+
+    Write-Step 'Installing MemPalace Python backend'
+    Invoke-WithRetry -Description 'python -m pip install --upgrade mempalace' -Action {
+        Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-m', 'pip', 'install', '--upgrade', 'mempalace')
+    } -MaxAttempts 3 -DelaySeconds 5
+
+    Write-Step 'Validating MemPalace Python backend'
+    Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
+}
+
 function Get-NpmViewText {
     param(
         [Parameter(Mandatory = $true)][string]$NpmExe,
@@ -742,26 +784,27 @@ try {
     }
 
     if (-not $pythonPath) {
-        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3' -Optional:(-not $RequirePython)
+        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
         if (-not $pythonPath) {
             $pythonPath = Get-CommandPathSafe -Name 'python'
         }
+        if (-not $pythonPath) {
+            $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
+        }
     }
 
-    if ($RequirePython -and -not $pythonPath) {
-        throw 'Python is required but could not be installed or found.'
+    if (-not $pythonPath) {
+        throw 'Python is required for mempalace-pi but could not be installed or found.'
     }
 
-    if ($pythonPath) {
-        try {
-            Write-Host "python: $(& $pythonPath --version 2>&1)"
-        }
-        catch {
-            Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
-        }
-    } else {
-        Write-Warning 'Python was not found. mempalace-pi may require a manual Python installation later.'
+    try {
+        Write-Host "python: $(& $pythonPath --version 2>&1)"
     }
+    catch {
+        Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
+    }
+
+    Install-MemPalacePythonBackend -PythonPath $pythonPath
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath

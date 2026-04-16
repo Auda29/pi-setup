@@ -208,6 +208,48 @@ function Invoke-WithRetry {
     }
 }
 
+function Get-PythonCommandSpec {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $leaf = Split-Path -Leaf $PythonPath
+    $baseArguments = @()
+    if ($leaf -ieq 'py.exe' -or $leaf -ieq 'py') {
+        $baseArguments += '-3'
+    }
+
+    return [ordered]@{
+        FilePath      = $PythonPath
+        BaseArguments = $baseArguments
+    }
+}
+
+function Invoke-PythonCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+    $allArguments = @($pythonSpec['BaseArguments']) + @($Arguments)
+    Invoke-External -FilePath $pythonSpec['FilePath'] -Arguments $allArguments -WorkingDirectory $WorkingDirectory
+}
+
+function Install-MemPalacePythonBackend {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+
+    Write-Step 'Installing MemPalace Python backend'
+    Invoke-WithRetry -Description 'python -m pip install --upgrade mempalace' -Action {
+        Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-m', 'pip', 'install', '--upgrade', 'mempalace')
+    } -MaxAttempts 3 -DelaySeconds 5
+
+    Write-Step 'Validating MemPalace Python backend'
+    Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
+}
+
 function Get-NpmViewText {
     param(
         [Parameter(Mandatory = $true)][string]$NpmExe,
@@ -651,9 +693,23 @@ try {
         throw 'Git Bash (bash.exe) was not found after installing Git for Windows.'
     }
 
-    $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
+    $pythonPath = Get-CommandPathSafe -Name 'py'
     if (-not $pythonPath) {
-        $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3' -Optional:$(-not $RequirePython)
+        $pythonPath = Get-CommandPathSafe -Name 'python'
+    }
+
+    if (-not $pythonPath) {
+        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
+        if (-not $pythonPath) {
+            $pythonPath = Get-CommandPathSafe -Name 'python'
+        }
+        if (-not $pythonPath) {
+            $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
+        }
+    }
+
+    if (-not $pythonPath) {
+        throw 'Python is required for mempalace-pi but could not be installed or found.'
     }
 
     Write-Host "node: $(& $nodePath --version)"
@@ -661,17 +717,14 @@ try {
     Write-Host "git:  $(& $gitPath --version)"
     Write-Host "bash: $gitBashPath"
 
-    if ($pythonPath) {
-        try {
-            Write-Host "python: $(& $pythonPath --version 2>&1)"
-        }
-        catch {
-            Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
-        }
+    try {
+        Write-Host "python: $(& $pythonPath --version 2>&1)"
     }
-    else {
-        Write-Warning 'Python was not found. mempalace-pi may require a manual Python installation later.'
+    catch {
+        Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
     }
+
+    Install-MemPalacePythonBackend -PythonPath $pythonPath
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
@@ -838,7 +891,7 @@ The start script sets these environment variables for the current session:
 - PYTHONUTF8=1
 - PYTHONIOENCODING=utf-8
 
-That is especially useful on Windows, in particular for mempalace-pi.
+That is especially useful on Windows, in particular for mempalace-pi. The installer also provisions the Python `mempalace` backend so the MemPalace agent tools can run.
 
 If something goes wrong
 -----------------------
@@ -846,7 +899,7 @@ If something goes wrong
 1. Check the latest file in .pi\logs\
 2. Verify that pi, node, npm, and git are available
 3. Confirm that Git Bash exists and that both .pi\settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
-4. If Python-based features fail, verify that Python is installed and callable via py or python
+4. If Python-based features fail, verify that Python is installed and that `py -3 -c "import mempalace, mempalace.mcp_server"` works
 5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agents\AGENTS.md
 
 Installed packages

@@ -51,9 +51,10 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 2. installs missing prerequisites via `winget` when possible
    - Node.js LTS
    - Git for Windows
-   - optional Python 3
+   - Python 3 for `mempalace-pi`
 3. installs or updates `@mariozechner/pi-coding-agent` globally
 4. installs the Pi extensions locally in `.pi-packages`
+5. installs the Python package `mempalace` so `mempalace-pi` works on Windows out of the box
 5. writes a robust `.pi/settings.json`
    - `npmCommand`
    - `shellPath`
@@ -125,7 +126,7 @@ This sets the following for the session:
 - `PYTHONUTF8=1`
 - `PYTHONIOENCODING=utf-8`
 
-That is especially helpful for `mempalace-pi` on Windows.
+That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
 ## Installer options
 
@@ -137,7 +138,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 
 ### Require Python
 
-If you want `mempalace-pi` to be prepared cleanly right away:
+Python is now installed automatically because `mempalace-pi` depends on the Python `mempalace` backend for full functionality.
+
+The flag is still accepted for compatibility, but standard installation already prepares Python + `mempalace`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -RequirePython
