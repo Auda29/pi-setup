@@ -529,14 +529,15 @@ function ConvertTo-HashtableCompatible {
         return $result
     }
 
-    if (($InputObject -is [psobject]) -and $InputObject.PSObject.Properties.Count -gt 0) {
-        $result = [ordered]@{}
-        foreach ($property in $InputObject.PSObject.Properties) {
-            if ($property.MemberType -like '*Property') {
+    if ($InputObject -is [psobject]) {
+        $properties = @($InputObject.PSObject.Properties | Where-Object { $_.MemberType -like '*Property' })
+        if ($properties.Count -gt 0) {
+            $result = [ordered]@{}
+            foreach ($property in $properties) {
                 $result[$property.Name] = ConvertTo-HashtableCompatible -InputObject $property.Value
             }
+            return $result
         }
-        return $result
     }
 
     return $InputObject
