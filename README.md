@@ -59,9 +59,10 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
    - `shellPath`
    - `packages`
    - `sessionDir`
-6. creates backups of existing settings
-7. creates a Windows start script: `scripts/start-pi.ps1`
-8. writes an install log to `.pi/logs/`
+6. creates or updates an `AGENTS.md` with tool guidance for coding agents
+7. creates backups of existing settings
+8. creates a Windows start script: `scripts/start-pi.ps1`
+9. writes an install log to `.pi/logs/`
 
 ## Why this approach?
 
@@ -214,6 +215,7 @@ This makes it more likely to survive:
 - `.pi/settings.json` - project-local Pi configuration
 - `.pi/backups/` - backups of existing settings
 - `.pi/logs/` - install/repair/uninstall logs
+- `AGENTS.md` - agent guidance for installed Pi tools
 
 ## Installed packages
 
@@ -299,6 +301,10 @@ The target folder will contain, among other things:
 - `scripts\start-pi.ps1`
 - `README-pi-stack.txt`
 
+The global installer also writes shared agent guidance to:
+
+- `%USERPROFILE%\.pi\agents\AGENTS.md`
+
 ## Complete global workflow example
 
 Example: create a global Pi stack under `C:\Tools\pi-stack`, verify the generated files, and start Pi.
@@ -350,6 +356,8 @@ If a setup is half-broken, dependencies are missing, or local npm artifacts are 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
 ```
+
+The local installer also writes or updates `AGENTS.md` in the target repo/folder.
 
 The repair script targets the repo/folder you run it from. You can also point it at a specific repo:
 
