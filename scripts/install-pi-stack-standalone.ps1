@@ -10,6 +10,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$IsWindowsPlatform = if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
+    [bool]$IsWindows
+}
+else {
+    ($PSVersionTable.PSEdition -eq 'Desktop') -or ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
+}
+
 $TranscriptStarted = $false
 $ScriptExitCode = 0
 $ResolvedInstallRoot = $null
@@ -251,7 +258,7 @@ function Assert-PackageInstalled {
 }
 
 try {
-    if (-not $IsWindows) {
+    if (-not $IsWindowsPlatform) {
         throw 'This standalone script is intended for Windows.'
     }
 

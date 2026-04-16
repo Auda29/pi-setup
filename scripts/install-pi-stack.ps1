@@ -9,6 +9,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$IsWindowsPlatform = if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
+    [bool]$IsWindows
+}
+else {
+    ($PSVersionTable.PSEdition -eq 'Desktop') -or ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
 $PiDir = Join-Path $ProjectRoot '.pi'
@@ -375,7 +382,7 @@ try {
     Write-Info "Install log: $InstallLogPath"
     Write-Step 'Checking and installing prerequisites'
 
-    if (-not $IsWindows) {
+    if (-not $IsWindowsPlatform) {
         throw 'This bootstrap script is intended for Windows.'
     }
 
