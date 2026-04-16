@@ -10,6 +10,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$IsWindowsPlatform = if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
+    [bool]$IsWindows
+}
+else {
+    ($PSVersionTable.PSEdition -eq 'Desktop') -or ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT)
+}
+
 $TranscriptStarted = $false
 $ScriptExitCode = 0
 $ResolvedInstallRoot = $null
@@ -437,6 +444,42 @@ function Save-JsonObject {
     Set-Content -LiteralPath $Path -Value ($json + "`n") -Encoding UTF8
 }
 
+function ConvertTo-HashtableCompatible {
+    param($InputObject)
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        $result = [ordered]@{}
+        foreach ($key in $InputObject.Keys) {
+            $result[$key] = ConvertTo-HashtableCompatible -InputObject $InputObject[$key]
+        }
+        return $result
+    }
+
+    if (($InputObject -is [System.Collections.IEnumerable]) -and ($InputObject -isnot [string])) {
+        $result = @()
+        foreach ($item in $InputObject) {
+            $result += ,(ConvertTo-HashtableCompatible -InputObject $item)
+        }
+        return $result
+    }
+
+    if (($InputObject -is [psobject]) -and $InputObject.PSObject.Properties.Count -gt 0) {
+        $result = [ordered]@{}
+        foreach ($property in $InputObject.PSObject.Properties) {
+            if ($property.MemberType -like '*Property') {
+                $result[$property.Name] = ConvertTo-HashtableCompatible -InputObject $property.Value
+            }
+        }
+        return $result
+    }
+
+    return $InputObject
+}
+
 function Load-JsonObject {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -450,7 +493,14 @@ function Load-JsonObject {
     }
 
     try {
-        $parsed = $raw | ConvertFrom-Json -AsHashtable
+        $convertFromJsonCommand = Get-Command ConvertFrom-Json -ErrorAction Stop
+        if ($convertFromJsonCommand.Parameters.ContainsKey('AsHashtable')) {
+            $parsed = $raw | ConvertFrom-Json -AsHashtable
+        }
+        else {
+            $parsed = ConvertTo-HashtableCompatible -InputObject ($raw | ConvertFrom-Json)
+        }
+
         if ($null -eq $parsed) {
             return [ordered]@{}
         }
@@ -548,7 +598,7 @@ function Assert-PackageInstalled {
     }
 }
 
-if (-not $IsWindows) {
+if (-not $IsWindowsPlatform) {
     throw 'This global script is intended for Windows.'
 }
 

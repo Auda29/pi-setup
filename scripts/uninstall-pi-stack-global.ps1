@@ -79,6 +79,42 @@ function Invoke-External {
     }
 }
 
+function ConvertTo-HashtableCompatible {
+    param($InputObject)
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        $result = [ordered]@{}
+        foreach ($key in $InputObject.Keys) {
+            $result[$key] = ConvertTo-HashtableCompatible -InputObject $InputObject[$key]
+        }
+        return $result
+    }
+
+    if (($InputObject -is [System.Collections.IEnumerable]) -and ($InputObject -isnot [string])) {
+        $result = @()
+        foreach ($item in $InputObject) {
+            $result += ,(ConvertTo-HashtableCompatible -InputObject $item)
+        }
+        return $result
+    }
+
+    if (($InputObject -is [psobject]) -and $InputObject.PSObject.Properties.Count -gt 0) {
+        $result = [ordered]@{}
+        foreach ($property in $InputObject.PSObject.Properties) {
+            if ($property.MemberType -like '*Property') {
+                $result[$property.Name] = ConvertTo-HashtableCompatible -InputObject $property.Value
+            }
+        }
+        return $result
+    }
+
+    return $InputObject
+}
+
 function Load-JsonObject {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -91,7 +127,12 @@ function Load-JsonObject {
         return [ordered]@{}
     }
 
-    return ($raw | ConvertFrom-Json -AsHashtable)
+    $convertFromJsonCommand = Get-Command ConvertFrom-Json -ErrorAction Stop
+    if ($convertFromJsonCommand.Parameters.ContainsKey('AsHashtable')) {
+        return ($raw | ConvertFrom-Json -AsHashtable)
+    }
+
+    return (ConvertTo-HashtableCompatible -InputObject ($raw | ConvertFrom-Json))
 }
 
 function Save-JsonObject {
