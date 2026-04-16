@@ -41,6 +41,13 @@ function Ensure-Directory {
     }
 }
 
+function Get-CommandPathSafe {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -84,6 +91,50 @@ function Invoke-WithRetry {
             Start-Sleep -Seconds $DelaySeconds
         }
     }
+}
+
+function Get-PythonCommandSpec {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $leaf = Split-Path -Leaf $PythonPath
+    $baseArguments = @()
+    if ($leaf -ieq 'py.exe' -or $leaf -ieq 'py') {
+        $baseArguments += '-3'
+    }
+
+    return [ordered]@{
+        FilePath      = $PythonPath
+        BaseArguments = $baseArguments
+    }
+}
+
+function Invoke-PythonCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+    $allArguments = @($pythonSpec['BaseArguments']) + @($Arguments)
+    Invoke-External -FilePath $pythonSpec['FilePath'] -Arguments $allArguments -WorkingDirectory $WorkingDirectory
+}
+
+function Test-MemPalacePythonBackend {
+    $pythonPath = Get-CommandPathSafe -Name 'py'
+    if (-not $pythonPath) {
+        $pythonPath = Get-CommandPathSafe -Name 'python'
+    }
+
+    if (-not $pythonPath) {
+        throw 'MemPalace backend check failed: neither py nor python is available.'
+    }
+
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+
+    Write-Step 'Validating MemPalace backend after global repair'
+    Invoke-PythonCommand -PythonPath $pythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
 }
 
 Ensure-Directory -Path $GlobalRepairLogDir
@@ -142,6 +193,8 @@ try {
     Invoke-WithRetry -Description 'Re-running global install script' -Action {
         Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ResolvedInstallRoot
     } -MaxAttempts 2 -DelaySeconds 5
+
+    Test-MemPalacePythonBackend
 
     Write-Step 'Done'
     Write-Host 'Global repair completed successfully.' -ForegroundColor Green

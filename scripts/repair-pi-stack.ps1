@@ -94,6 +94,50 @@ function Invoke-WithRetry {
     }
 }
 
+function Get-PythonCommandSpec {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $leaf = Split-Path -Leaf $PythonPath
+    $baseArguments = @()
+    if ($leaf -ieq 'py.exe' -or $leaf -ieq 'py') {
+        $baseArguments += '-3'
+    }
+
+    return [ordered]@{
+        FilePath      = $PythonPath
+        BaseArguments = $baseArguments
+    }
+}
+
+function Invoke-PythonCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+    $allArguments = @($pythonSpec['BaseArguments']) + @($Arguments)
+    Invoke-External -FilePath $pythonSpec['FilePath'] -Arguments $allArguments -WorkingDirectory $WorkingDirectory
+}
+
+function Test-MemPalacePythonBackend {
+    $pythonPath = Get-CommandPathSafe -Name 'py'
+    if (-not $pythonPath) {
+        $pythonPath = Get-CommandPathSafe -Name 'python'
+    }
+
+    if (-not $pythonPath) {
+        throw 'MemPalace backend check failed: neither py nor python is available.'
+    }
+
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+
+    Write-Step 'Validating MemPalace backend after repair'
+    Invoke-PythonCommand -PythonPath $pythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
+}
+
 Ensure-Directory -Path $PiDir
 Ensure-Directory -Path $LogsDir
 
@@ -143,6 +187,8 @@ try {
     Invoke-WithRetry -Description 'Re-running install script' -Action {
         Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ResolvedProjectRoot
     } -MaxAttempts 2 -DelaySeconds 5
+
+    Test-MemPalacePythonBackend
 
     Write-Step 'Done'
     Write-Host 'Repair completed successfully.' -ForegroundColor Green
