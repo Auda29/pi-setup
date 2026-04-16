@@ -1,0 +1,570 @@
+[CmdletBinding()]
+param(
+    [switch]$IncludeTwinCATAds,
+    [string]$TwinCATAdsSource,
+    [switch]$RequirePython,
+    [switch]$UseLatestPackageVersions
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Split-Path -Parent $ScriptDir
+$PiDir = Join-Path $ProjectRoot '.pi'
+$PackagesDir = Join-Path $ProjectRoot '.pi-packages'
+$PackagesManifestPath = Join-Path $PackagesDir 'package.json'
+$PackagesLockPath = Join-Path $PackagesDir 'package-lock.json'
+$SettingsPath = Join-Path $PiDir 'settings.json'
+$StartScriptPath = Join-Path $ScriptDir 'start-pi.ps1'
+$SettingsBackupDir = Join-Path $PiDir 'backups'
+$LogsDir = Join-Path $PiDir 'logs'
+$InstallLogPath = Join-Path $LogsDir ("install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$TranscriptStarted = $false
+$ScriptExitCode = 0
+
+$PinnedVersions = [ordered]@{
+    'mempalace-pi'   = '0.2.0'
+    'pi-lens'        = '3.8.26'
+    'pi-mcp-adapter' = '2.4.0'
+    'pi-subagents'   = '0.14.1'
+    'pi-web-access'  = '0.10.6'
+}
+
+$PackageNames = @($PinnedVersions.Keys)
+
+function Write-Step {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "`n==> $Message" -ForegroundColor Cyan
+}
+
+function Write-Info {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "[info] $Message" -ForegroundColor DarkGray
+}
+
+function Write-ErrorLine {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "[error] $Message" -ForegroundColor Red
+}
+
+function Refresh-ProcessPath {
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $combined = @($machinePath, $userPath) -join ';'
+    if (-not [string]::IsNullOrWhiteSpace($combined)) {
+        $env:Path = $combined
+    }
+}
+
+function Ensure-Directory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+}
+
+function Test-CommandExists {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Get-CommandPathSafe {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+
+    return $null
+}
+
+function Invoke-External {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @(),
+        [string]$WorkingDirectory
+    )
+
+    if ($WorkingDirectory) {
+        Push-Location $WorkingDirectory
+    }
+
+    try {
+        Write-Info ("Run: " + $FilePath + ' ' + ($Arguments -join ' '))
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -ne 0) {
+            throw "Befehl fehlgeschlagen ($exitCode): $FilePath $($Arguments -join ' ')"
+        }
+    }
+    finally {
+        if ($WorkingDirectory) {
+            Pop-Location
+        }
+    }
+}
+
+function Invoke-WithRetry {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Action,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [int]$MaxAttempts = 3,
+        [int]$DelaySeconds = 4
+    )
+
+    $attempt = 0
+    while ($attempt -lt $MaxAttempts) {
+        $attempt++
+        try {
+            Write-Info "$Description (Versuch $attempt/$MaxAttempts)"
+            & $Action
+            return
+        }
+        catch {
+            if ($attempt -ge $MaxAttempts) {
+                throw
+            }
+            Write-Warning "$Description fehlgeschlagen: $($_.Exception.Message)"
+            Write-Info "Warte $DelaySeconds Sekunden vor dem naechsten Versuch ..."
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+}
+
+function Invoke-WingetInstall {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageId,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    $winget = Get-CommandPathSafe -Name 'winget'
+    if (-not $winget) {
+        throw "'$DisplayName' fehlt und winget ist nicht verfuegbar. Bitte installiere es manuell."
+    }
+
+    Write-Step "Installiere $DisplayName ueber winget"
+    Invoke-WithRetry -Description "winget install $PackageId" -Action {
+        Invoke-External -FilePath $winget -Arguments @(
+            'install', '--id', $PackageId, '--exact', '--silent',
+            '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
+        )
+    } -MaxAttempts 2 -DelaySeconds 5
+    Refresh-ProcessPath
+}
+
+function Ensure-Command {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string]$WingetPackageId,
+        [string]$DisplayName = $Name,
+        [switch]$Optional
+    )
+
+    if (Test-CommandExists -Name $Name) {
+        return (Get-CommandPathSafe -Name $Name)
+    }
+
+    if ($WingetPackageId) {
+        try {
+            Invoke-WingetInstall -PackageId $WingetPackageId -DisplayName $DisplayName
+        }
+        catch {
+            if ($Optional) {
+                Write-Warning $_.Exception.Message
+                return $null
+            }
+            throw
+        }
+
+        if (Test-CommandExists -Name $Name) {
+            return (Get-CommandPathSafe -Name $Name)
+        }
+    }
+
+    if ($Optional) {
+        Write-Warning "'$DisplayName' wurde nicht gefunden."
+        return $null
+    }
+
+    throw "'$DisplayName' wurde nicht gefunden."
+}
+
+function Get-NpmExecutable {
+    $npmCmd = Get-CommandPathSafe -Name 'npm.cmd'
+    if ($npmCmd) { return $npmCmd }
+
+    $npm = Get-CommandPathSafe -Name 'npm'
+    if ($npm) { return $npm }
+
+    return $null
+}
+
+function Get-PiExecutable {
+    $pi = Get-CommandPathSafe -Name 'pi'
+    if ($pi) { return $pi }
+
+    $appData = [Environment]::GetFolderPath('ApplicationData')
+    $piCmd = Join-Path $appData 'npm\pi.cmd'
+    if (Test-Path -LiteralPath $piCmd) {
+        return $piCmd
+    }
+
+    return $null
+}
+
+function Load-JsonObject {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @{}
+    }
+
+    $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return @{}
+    }
+
+    $obj = $raw | ConvertFrom-Json -AsHashtable
+    if ($null -eq $obj) {
+        return @{}
+    }
+
+    return $obj
+}
+
+function Save-JsonObject {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Data
+    )
+
+    Ensure-Directory -Path (Split-Path -Parent $Path)
+    $json = $Data | ConvertTo-Json -Depth 100
+    Set-Content -LiteralPath $Path -Value ($json + "`n") -Encoding UTF8
+}
+
+function Backup-IfExists {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    Ensure-Directory -Path $SettingsBackupDir
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $target = Join-Path $SettingsBackupDir ((Split-Path -Leaf $Path) + '.' + $timestamp + '.bak')
+    Copy-Item -LiteralPath $Path -Destination $target -Force
+    Write-Info "Backup erstellt: $target"
+}
+
+function Merge-UniqueStrings {
+    param(
+        [object[]]$Existing,
+        [object[]]$Incoming
+    )
+
+    $list = New-Object System.Collections.Generic.List[string]
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($item in @($Existing) + @($Incoming)) {
+        if ($null -eq $item) { continue }
+        $text = [string]$item
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        if ($seen.Add($text)) {
+            $list.Add($text)
+        }
+    }
+
+    return @($list)
+}
+
+function Get-DependencyMap {
+    $dependencies = [ordered]@{}
+    foreach ($name in $PackageNames) {
+        if ($UseLatestPackageVersions) {
+            $dependencies[$name] = 'latest'
+        }
+        else {
+            $dependencies[$name] = $PinnedVersions[$name]
+        }
+    }
+    return $dependencies
+}
+
+function Ensure-PackageManifest {
+    $manifest = [ordered]@{
+        name        = 'pi-setup-stack'
+        private     = $true
+        description = 'Lokaler Pi-Stack fuer dieses Projekt'
+        dependencies = (Get-DependencyMap)
+    }
+
+    if (-not (Test-Path -LiteralPath $PackagesManifestPath)) {
+        Write-Info "Erzeuge $PackagesManifestPath"
+        Save-JsonObject -Path $PackagesManifestPath -Data $manifest
+        return
+    }
+
+    $existing = Load-JsonObject -Path $PackagesManifestPath
+    if (-not $existing.ContainsKey('name')) { $existing['name'] = $manifest['name'] }
+    $existing['private'] = $true
+    if (-not $existing.ContainsKey('description')) { $existing['description'] = $manifest['description'] }
+
+    $deps = [ordered]@{}
+    if ($existing.ContainsKey('dependencies') -and $existing['dependencies']) {
+        foreach ($entry in $existing['dependencies'].GetEnumerator()) {
+            $deps[$entry.Key] = $entry.Value
+        }
+    }
+
+    foreach ($entry in (Get-DependencyMap).GetEnumerator()) {
+        $deps[$entry.Key] = $entry.Value
+    }
+
+    $existing['dependencies'] = $deps
+    Save-JsonObject -Path $PackagesManifestPath -Data $existing
+}
+
+function Get-GitBashPath {
+    $candidates = @(
+        'C:\Program Files\Git\bin\bash.exe',
+        'C:\Program Files (x86)\Git\bin\bash.exe'
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    $bash = Get-CommandPathSafe -Name 'bash'
+    if ($bash) { return $bash }
+    return $null
+}
+
+function Test-PackageInstalled {
+    param([Parameter(Mandatory = $true)][string]$PackageName)
+
+    $packagePath = Join-Path $PackagesDir ("node_modules\\$PackageName")
+    return (Test-Path -LiteralPath $packagePath)
+}
+
+function Assert-PackageInstalled {
+    param([Parameter(Mandatory = $true)][string]$PackageName)
+
+    if (-not (Test-PackageInstalled -PackageName $PackageName)) {
+        throw "Package fehlt nach npm install: $PackageName"
+    }
+}
+
+Ensure-Directory -Path $PiDir
+Ensure-Directory -Path $LogsDir
+
+try {
+    try {
+        Start-Transcript -Path $InstallLogPath -Force | Out-Null
+        $TranscriptStarted = $true
+    }
+    catch {
+        Write-Warning "Konnte kein Transcript starten: $($_.Exception.Message)"
+    }
+
+    Write-Info "Install-Log: $InstallLogPath"
+    Write-Step 'Pruefe bzw. installiere Voraussetzungen'
+
+    if (-not $IsWindows) {
+        throw 'Dieses Bootstrap-Script ist fuer Windows gedacht.'
+    }
+
+    $nodePath = Ensure-Command -Name 'node' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'Node.js LTS'
+    $npmPath = Ensure-Command -Name 'npm' -WingetPackageId 'OpenJS.NodeJS.LTS' -DisplayName 'npm'
+    $npmExe = Get-NpmExecutable
+    if (-not $npmExe) {
+        throw 'npm konnte nicht aufgeloest werden.'
+    }
+
+    Write-Host "node: $(& $nodePath --version)"
+    Write-Host "npm:  $(& $npmExe --version)"
+
+    $gitBashPath = Get-GitBashPath
+    if (-not $gitBashPath) {
+        Ensure-Command -Name 'git' -WingetPackageId 'Git.Git' -DisplayName 'Git for Windows'
+        $gitBashPath = Get-GitBashPath
+    }
+
+    if ($gitBashPath) {
+        Write-Host "bash: $gitBashPath"
+    } else {
+        throw 'Keine bash-Shell gefunden. Pi braucht unter Windows Git Bash oder eine andere bash.exe.'
+    }
+
+    $pythonPath = Get-CommandPathSafe -Name 'py'
+    if (-not $pythonPath) {
+        $pythonPath = Get-CommandPathSafe -Name 'python'
+    }
+
+    if (-not $pythonPath) {
+        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3' -Optional:(-not $RequirePython)
+        if (-not $pythonPath) {
+            $pythonPath = Get-CommandPathSafe -Name 'python'
+        }
+    }
+
+    if ($RequirePython -and -not $pythonPath) {
+        throw 'Python ist erforderlich, konnte aber nicht installiert oder gefunden werden.'
+    }
+
+    if ($pythonPath) {
+        try {
+            Write-Host "python: $(& $pythonPath --version 2>&1)"
+        }
+        catch {
+            Write-Warning "Python gefunden, aber Version konnte nicht gelesen werden: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Warning 'Python wurde nicht gefunden. mempalace-pi kann spaeter eine manuelle Python-Installation benoetigen.'
+    }
+
+    Write-Step 'Installiere oder aktualisiere pi-coding-agent global'
+    Invoke-WithRetry -Description 'npm install -g @mariozechner/pi-coding-agent' -Action {
+        Invoke-External -FilePath $npmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
+    } -MaxAttempts 3 -DelaySeconds 5
+    Refresh-ProcessPath
+
+    $piExe = Get-PiExecutable
+    if (-not $piExe) {
+        throw 'pi wurde nach dem globalen npm-Install nicht gefunden.'
+    }
+
+    Write-Host "pi:   $(& $piExe --version)"
+
+    Write-Step 'Bereite Projektstruktur vor'
+    Ensure-Directory -Path $PackagesDir
+    Ensure-PackageManifest
+
+    Write-Step 'Installiere lokale Pi-Packages per npm'
+    Invoke-WithRetry -Description 'npm install fuer .pi-packages' -Action {
+        Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', '--no-fund', '--no-audit')
+    } -MaxAttempts 3 -DelaySeconds 5
+
+    foreach ($packageName in $PackageNames) {
+        Assert-PackageInstalled -PackageName $packageName
+    }
+
+    if ($IncludeTwinCATAds) {
+        if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+            throw 'Wenn -IncludeTwinCATAds gesetzt ist, muss auch -TwinCATAdsSource angegeben werden.'
+        }
+
+        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
+        Write-Step 'Installiere pi-twincat-ads aus lokalem Pfad'
+        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
+            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+        Assert-PackageInstalled -PackageName 'pi-twincat-ads'
+    }
+
+    Write-Step 'Schreibe robuste Pi-Projektkonfiguration'
+    Backup-IfExists -Path $SettingsPath
+    $settings = Load-JsonObject -Path $SettingsPath
+
+    $settings['npmCommand'] = @($npmExe)
+    $settings['shellPath'] = $gitBashPath
+    $settings['sessionDir'] = '.pi/sessions'
+
+    $packagePaths = @(
+        '../.pi-packages/node_modules/pi-subagents',
+        '../.pi-packages/node_modules/pi-mcp-adapter',
+        '../.pi-packages/node_modules/pi-lens',
+        '../.pi-packages/node_modules/pi-web-access',
+        '../.pi-packages/node_modules/mempalace-pi'
+    )
+
+    if ($IncludeTwinCATAds) {
+        $packagePaths += '../.pi-packages/node_modules/pi-twincat-ads'
+    }
+
+    $settings['packages'] = Merge-UniqueStrings -Existing $settings['packages'] -Incoming $packagePaths
+    Save-JsonObject -Path $SettingsPath -Data $settings
+
+        Write-Step 'Schreibe Startskript fuer mempalace/Python-UTF8'
+    $startScript = @"
+param(
+    [Parameter(ValueFromRemainingArguments = `$true)]
+    [string[]]`$PiArgs
+)
+
+`$ErrorActionPreference = 'Stop'
+`$env:PYTHONUTF8 = '1'
+`$env:PYTHONIOENCODING = 'utf-8'
+
+`$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$ProjectRoot = Split-Path -Parent `$ScriptDir
+Set-Location `$ProjectRoot
+
+`$piCmd = Get-Command 'pi' -ErrorAction SilentlyContinue
+`$piCmdPath = if (`$piCmd) { `$piCmd.Source } else { `$null }
+if (-not `$piCmdPath) {
+    `$piFallback = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'npm\pi.cmd'
+    if (Test-Path -LiteralPath `$piFallback) {
+        `$piCmdPath = `$piFallback
+    }
+}
+
+if (-not `$piCmdPath) {
+    throw 'pi wurde nicht gefunden. Bitte zuerst scripts/install-pi-stack.ps1 ausfuehren.'
+}
+
+& `$piCmdPath @PiArgs
+exit `$LASTEXITCODE
+"@
+    Set-Content -LiteralPath $StartScriptPath -Value $startScript -Encoding UTF8
+
+    Write-Step 'Validiere lokale Paketpfade'
+    foreach ($packagePath in $packagePaths) {
+        $resolvedPath = Resolve-Path -LiteralPath (Join-Path $PiDir $packagePath) -ErrorAction Stop
+        Write-Info "OK: $resolvedPath"
+    }
+
+    Write-Step 'Fertig'
+    Write-Host 'Erfolgreich vorbereitet:' -ForegroundColor Green
+    Write-Host "  - Global: @mariozechner/pi-coding-agent"
+    foreach ($packageName in $PackageNames) {
+        Write-Host "  - Lokal:  $packageName"
+    }
+    if ($IncludeTwinCATAds) {
+        Write-Host '  - Lokal:  pi-twincat-ads'
+    }
+
+    Write-Host "`nWichtige Dateien:"
+    Write-Host "  - $PackagesManifestPath"
+    if (Test-Path -LiteralPath $PackagesLockPath) {
+        Write-Host "  - $PackagesLockPath"
+    }
+    Write-Host "  - $SettingsPath"
+    Write-Host "  - $StartScriptPath"
+    Write-Host "  - $($MyInvocation.MyCommand.Path)"
+    Write-Host "  - $InstallLogPath"
+
+    Write-Host "`nEmpfohlener Start unter Windows:"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1"
+}
+catch {
+    $ScriptExitCode = 1
+    Write-ErrorLine $_.Exception.Message
+    Write-Host "Logdatei: $InstallLogPath" -ForegroundColor Yellow
+}
+finally {
+    if ($TranscriptStarted) {
+        try {
+            Stop-Transcript | Out-Null
+        }
+        catch {
+        }
+    }
+}
+
+exit $ScriptExitCode
