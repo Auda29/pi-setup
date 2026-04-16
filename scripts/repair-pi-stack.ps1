@@ -135,7 +135,7 @@ function Test-MemPalacePythonBackend {
     $env:PYTHONIOENCODING = 'utf-8'
 
     Write-Step 'Validating MemPalace backend after repair'
-    Invoke-PythonCommand -PythonPath $pythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
+    Invoke-PythonCommand -PythonPath $pythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
 }
 
 Ensure-Directory -Path $PiDir

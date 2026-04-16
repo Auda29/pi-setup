@@ -55,15 +55,15 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 3. installs or updates `@mariozechner/pi-coding-agent` globally
 4. installs the Pi extensions locally in `.pi-packages`
 5. installs the Python package `mempalace` so `mempalace-pi` works on Windows out of the box
-5. writes a robust `.pi/settings.json`
+6. writes a robust `.pi/settings.json`
    - `npmCommand`
    - `shellPath`
    - `packages`
    - `sessionDir`
-6. creates or updates an `AGENTS.md` with tool guidance for coding agents
-7. creates backups of existing settings
-8. creates a Windows start script: `scripts/start-pi.ps1`
-9. writes an install log to `.pi/logs/`
+7. creates or updates an `AGENTS.md` with tool guidance for coding agents
+8. creates backups of existing settings
+9. creates a Windows start script: `scripts/start-pi.ps1`
+10. writes an install log to `.pi/logs/`
 
 ## Why this approach?
 
@@ -80,7 +80,7 @@ Recommended:
 - `winget` available
 - internet access for `winget` and `npm`
 
-If `winget` is missing, you must install missing prerequisites manually.
+If `winget` is missing, you must install missing prerequisites manually, including Python for `mempalace-pi`.
 
 ## Quick start
 
@@ -245,7 +245,7 @@ That is exactly what the script is built for:
 
 ### 1. `winget` is missing
 
-Then you have to install Node.js, Git for Windows, and optionally Python manually.
+Then you have to install Node.js, Git for Windows, and Python manually.
 
 ### 2. `pi` is not found after global npm install
 
@@ -295,7 +295,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -
 
 Supported extra options mostly match the normal installer:
 
-- `-RequirePython`
+- `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
 - `-UseLatestPackageVersions`
 - `-IncludeTwinCATAds -TwinCATAdsSource <path>`
 
@@ -334,12 +334,13 @@ Get-Content C:\Tools\pi-stack\README-global-pi-stack.txt
 powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
 ```
 
-### 4. Optional: install with Python required and latest package versions
+### 4. Optional: install with latest package versions
+
+`-RequirePython` is no longer necessary for normal installs, because Python + the `mempalace` backend are prepared automatically.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -InstallRoot C:\Tools\pi-stack `
-  -RequirePython `
   -UseLatestPackageVersions
 ```
 
@@ -356,7 +357,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
 
 ### Repair local setup
 
-If a local setup is half-broken, dependencies are missing, or local npm artifacts are corrupted:
+If a local setup is half-broken, dependencies are missing, local npm artifacts are corrupted, or the MemPalace backend needs to be revalidated:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
@@ -386,7 +387,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
 
 ### Repair global setup
 
-If the global install root or global Pi settings need to be rebuilt:
+If the global install root or global Pi settings need to be rebuilt, or the MemPalace backend needs to be revalidated:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1

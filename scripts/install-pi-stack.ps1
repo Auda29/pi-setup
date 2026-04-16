@@ -263,7 +263,7 @@ function Install-MemPalacePythonBackend {
     } -MaxAttempts 3 -DelaySeconds 5
 
     Write-Step 'Validating MemPalace Python backend'
-    Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server; print("mempalace backend ok")')
+    Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
 }
 
 function Get-NpmViewText {
