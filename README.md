@@ -5,8 +5,8 @@
 - Run `scripts/install-pi-stack.ps1` if you want to install the Pi stack **into the repo/folder you run it from**.
 - Run `scripts/install-pi-stack-global.ps1` if you want a **global Pi setup** for all repos/editors.
 - Start Pi on Windows via `scripts/start-pi.ps1` to get the recommended Python UTF-8 environment variables.
-- If something breaks, use `scripts/repair-pi-stack.ps1`.
-- If you want to remove the local setup again, use `scripts/uninstall-pi-stack.ps1`.
+- If something breaks, use `scripts/repair-pi-stack.ps1` for local installs or `scripts/repair-pi-stack-global.ps1` for global installs.
+- If you want to remove a setup again, use `scripts/uninstall-pi-stack.ps1` for local installs or `scripts/uninstall-pi-stack-global.ps1` for global installs.
 
 Quick start for the current repo/folder:
 
@@ -209,8 +209,10 @@ This makes it more likely to survive:
 - `scripts/install-pi-stack.ps1` - bootstrap/installer for the current repo or folder
 - `scripts/install-pi-stack-global.ps1` - installs a global Pi stack and updates the global Pi settings
 - `scripts/start-pi.ps1` - recommended Windows start script
-- `scripts/repair-pi-stack.ps1` - repair an existing setup
+- `scripts/repair-pi-stack.ps1` - repair a local/project setup
+- `scripts/repair-pi-stack-global.ps1` - repair a global setup
 - `scripts/uninstall-pi-stack.ps1` - remove the project-local setup
+- `scripts/uninstall-pi-stack-global.ps1` - remove or clean up a global setup
 - `.pi-packages/package.json` - local stack definition
 - `.pi/settings.json` - project-local Pi configuration
 - `.pi/backups/` - backups of existing settings
@@ -299,7 +301,7 @@ The target folder will contain, among other things:
 - `.pi\settings.json`
 - `.pi-packages\package.json`
 - `scripts\start-pi.ps1`
-- `README-pi-stack.txt`
+- `README-global-pi-stack.txt`
 
 The global installer also writes shared agent guidance to:
 
@@ -320,7 +322,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -
 ```powershell
 Get-ChildItem C:\Tools\pi-stack
 Get-ChildItem C:\Tools\pi-stack\scripts
-Get-Content C:\Tools\pi-stack\README-pi-stack.txt
+Get-Content C:\Tools\pi-stack\README-global-pi-stack.txt
 ```
 
 ### 3. Start Pi from the global install folder
@@ -349,9 +351,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
 
 ## Repair and uninstall
 
-### Repair
+### Repair local setup
 
-If a setup is half-broken, dependencies are missing, or local npm artifacts are corrupted:
+If a local setup is half-broken, dependencies are missing, or local npm artifacts are corrupted:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
@@ -379,7 +381,27 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
   -TwinCATAdsSource ..\pi-twincat-ads
 ```
 
-### Uninstall
+### Repair global setup
+
+If the global install root or global Pi settings need to be rebuilt:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1
+```
+
+With a specific install root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
+```
+
+With a hard reset of global npm artifacts:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1 -ForceCleanNodeModules
+```
+
+### Uninstall local setup
 
 Remove the project-local Pi stack:
 
@@ -405,7 +427,33 @@ Keep settings, logs, or backups:
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack.ps1 -KeepSettings -KeepLogs -KeepBackups
 ```
 
-Both scripts write logs to `.pi/logs/`.
+### Uninstall global setup
+
+Remove or clean up the global Pi stack:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack-global.ps1
+```
+
+With a specific install root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
+```
+
+Also remove global Pi:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack-global.ps1 -RemoveGlobalPi
+```
+
+Keep the install root, global settings, or global agent instructions:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack-global.ps1 -KeepInstallRoot -KeepGlobalSettings -KeepGlobalAgents
+```
+
+Local scripts write logs to `.pi/logs/`. Global scripts write logs to `%USERPROFILE%\.pi\logs\`.
 
 ## License
 

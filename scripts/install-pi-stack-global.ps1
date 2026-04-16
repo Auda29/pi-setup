@@ -564,7 +564,7 @@ try {
     $SettingsPath = Join-Path $PiDir 'settings.json'
     $PackagesManifestPath = Join-Path $PackagesDir 'package.json'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
-    $ReadmePath = Join-Path $ResolvedInstallRoot 'README-pi-stack.txt'
+    $ReadmePath = Join-Path $ResolvedInstallRoot 'README-global-pi-stack.txt'
     $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
     Ensure-Directory -Path $PiDir
@@ -738,14 +738,14 @@ exit `$LASTEXITCODE
 "@
     Set-Content -LiteralPath $StartScriptPath -Value $startScript -Encoding UTF8
 
-    Write-Step 'Writing global README'
+    Write-Step 'Writing global install README'
     $readme = @'
-Pi Setup Stack
-==============
+Global Pi Setup Stack
+=====================
 
 This global Pi stack has been set up successfully.
 
-Installation directory:
+Install root:
 __INSTALL_ROOT__
 
 What is included
@@ -754,8 +754,9 @@ What is included
 - global @mariozechner/pi-coding-agent
 - centrally installed Pi extensions in .pi-packages
 - global Pi settings in %USERPROFILE%\.pi\agent\settings.json
+- global agent guidance in %USERPROFILE%\.pi\agents\AGENTS.md
 - install-root Pi settings in .pi\settings.json
-- Windows start script in scripts\start-pi.ps1
+- install-root Windows start script in scripts\start-pi.ps1
 - install logs in .pi\logs\
 
 Important files
@@ -764,14 +765,19 @@ Important files
 - .pi\settings.json
 - .pi-packages\package.json
 - scripts\start-pi.ps1
+- README-global-pi-stack.txt
 - .pi\logs\
+- %USERPROFILE%\.pi\agent\settings.json
+- %USERPROFILE%\.pi\agents\AGENTS.md
 
-Recommended start command
--------------------------
+Recommended usage
+-----------------
+
+To start Pi from this global install root:
 
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 
-This installer also updates the global Pi settings so the extensions are available in other repos and in editors that use the global Pi configuration.
+You can also start Pi from other repos or editors that use the global Pi configuration.
 
 Why use the start script?
 -------------------------
@@ -790,6 +796,7 @@ If something goes wrong
 2. Verify that pi, node, npm, and git are available
 3. Confirm that Git Bash exists and that both .pi\settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
 4. If Python-based features fail, verify that Python is installed and callable via py or python
+5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agents\AGENTS.md
 
 Installed packages
 ------------------
