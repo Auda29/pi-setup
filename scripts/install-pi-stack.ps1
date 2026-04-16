@@ -171,6 +171,19 @@ function Get-CommandPathSafe {
     return $null
 }
 
+function Test-MapHasKey {
+    param(
+        [Parameter(Mandatory = $true)]$Map,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    if ($null -eq $Map) { return $false }
+    if ($Map -is [System.Collections.IDictionary]) { return $Map.Contains($Key) }
+
+    $property = $Map.PSObject.Properties[$Key]
+    return $null -ne $property
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -686,12 +699,12 @@ function Ensure-PackageManifest {
     }
 
     $existing = Load-JsonObject -Path $PackagesManifestPath
-    if (-not $existing.ContainsKey('name')) { $existing['name'] = $manifest['name'] }
+    if (-not (Test-MapHasKey -Map $existing -Key 'name')) { $existing['name'] = $manifest['name'] }
     $existing['private'] = $true
-    if (-not $existing.ContainsKey('description')) { $existing['description'] = $manifest['description'] }
+    if (-not (Test-MapHasKey -Map $existing -Key 'description')) { $existing['description'] = $manifest['description'] }
 
     $deps = [ordered]@{}
-    if ($existing.ContainsKey('dependencies') -and $existing['dependencies']) {
+    if ((Test-MapHasKey -Map $existing -Key 'dependencies') -and $existing['dependencies']) {
         foreach ($entry in $existing['dependencies'].GetEnumerator()) {
             $deps[$entry.Key] = $entry.Value
         }

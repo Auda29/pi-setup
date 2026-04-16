@@ -157,6 +157,19 @@ function Get-CommandPathSafe {
     return $null
 }
 
+function Test-MapHasKey {
+    param(
+        [Parameter(Mandatory = $true)]$Map,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    if ($null -eq $Map) { return $false }
+    if ($Map -is [System.Collections.IDictionary]) { return $Map.Contains($Key) }
+
+    $property = $Map.PSObject.Properties[$Key]
+    return $null -ne $property
+}
+
 function Test-CommandExists {
     param([Parameter(Mandatory = $true)][string]$Name)
     return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
@@ -803,7 +816,7 @@ try {
     $globalSettings = Load-JsonObject -Path $GlobalPiAgentSettingsPath
     $globalSettings['npmCommand'] = @($npmExe)
     $globalSettings['shellPath'] = $gitBashPath
-    if (-not $globalSettings.ContainsKey('sessionDir') -or [string]::IsNullOrWhiteSpace([string]$globalSettings['sessionDir'])) {
+    if (-not (Test-MapHasKey -Map $globalSettings -Key 'sessionDir') -or [string]::IsNullOrWhiteSpace([string]$globalSettings['sessionDir'])) {
         $globalSettings['sessionDir'] = '.pi/sessions'
     }
     $globalSettings['packages'] = Merge-UniqueStrings -Existing $globalSettings['packages'] -Incoming $globalPackagePaths
