@@ -125,7 +125,7 @@ function Invoke-WithRetry {
     }
 }
 
-function Get-NpmViewJson {
+function Get-NpmViewText {
     param(
         [Parameter(Mandatory = $true)][string]$NpmExe,
         [Parameter(Mandatory = $true)][string[]]$Arguments
@@ -137,6 +137,20 @@ function Get-NpmViewJson {
     }
 
     $text = ($output | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    return $text
+}
+
+function Get-NpmViewJson {
+    param(
+        [Parameter(Mandatory = $true)][string]$NpmExe,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $text = Get-NpmViewText -NpmExe $NpmExe -Arguments $Arguments
     if ([string]::IsNullOrWhiteSpace($text)) {
         return $null
     }
@@ -165,32 +179,147 @@ function Test-NpmPackageVersionExists {
     return $text -eq $Version
 }
 
+function Get-GlobalNpmRoot {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
+    $text = Get-NpmViewText -NpmExe $NpmExe -Arguments @('root', '-g')
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    return $text.Split([Environment]::NewLine)[0].Trim()
+}
+
+function Get-GlobalPiCodingAgentPath {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
+    $globalRoot = Get-GlobalNpmRoot -NpmExe $NpmExe
+    if ([string]::IsNullOrWhiteSpace($globalRoot)) {
+        return $null
+    }
+
+    return (Join-Path $globalRoot '@mariozechner\pi-coding-agent')
+}
+
+function Get-PiRelatedRunningProcesses {
+    $results = @()
+    try {
+        $processes = Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+            $_.Name -match '^(node|npm|powershell|pwsh|cmd|bash)(\.exe)?$'
+        }
+
+        foreach ($process in $processes) {
+            $commandLine = [string]$process.CommandLine
+            if ($commandLine -match 'pi-coding-agent|\\npm\\pi\.cmd|\bpi\b|\bnpm\b') {
+                $results += [PSCustomObject]@{
+                    ProcessId   = $process.ProcessId
+                    Name        = $process.Name
+                    CommandLine = $commandLine
+                }
+            }
+        }
+    }
+    catch {
+        Write-Warning "Could not inspect running processes: $($_.Exception.Message)"
+    }
+
+    return @($results)
+}
+
+function Warn-AboutPiRelatedProcesses {
+    $processes = @(Get-PiRelatedRunningProcesses)
+    if ($processes.Count -eq 0) {
+        return
+    }
+
+    Write-Warning 'Detected running pi/npm/node-related processes. On Windows these can lock files and cause npm EPERM cleanup/install issues.'
+    foreach ($process in $processes | Select-Object -First 5) {
+        Write-Warning ("PID {0} {1}: {2}" -f $process.ProcessId, $process.Name, $process.CommandLine)
+    }
+    if ($processes.Count -gt 5) {
+        Write-Warning ("... and {0} more process(es)." -f ($processes.Count - 5))
+    }
+}
+
+function Remove-StaleGlobalPiCodingAgent {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
+    $packagePath = Get-GlobalPiCodingAgentPath -NpmExe $NpmExe
+    $appData = [Environment]::GetFolderPath('ApplicationData')
+    $shimCandidates = @(
+        (Join-Path $appData 'npm\pi.cmd'),
+        (Join-Path $appData 'npm\pi'),
+        (Join-Path $appData 'npm\node_modules\@mariozechner\pi-coding-agent')
+    )
+
+    Warn-AboutPiRelatedProcesses
+
+    try {
+        Invoke-External -FilePath $NpmExe -Arguments @('uninstall', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
+    }
+    catch {
+        Write-Warning "Global uninstall cleanup failed: $($_.Exception.Message)"
+    }
+
+    foreach ($path in @($packagePath) + $shimCandidates) {
+        if (-not $path) { continue }
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        try {
+            Write-Info "Removing stale path: $path"
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Could not remove stale path '$path': $($_.Exception.Message)"
+        }
+    }
+}
+
 function Install-GlobalPiCodingAgent {
     param([Parameter(Mandatory = $true)][string]$NpmExe)
 
     Write-Step 'Installing or updating pi-coding-agent globally'
 
-    $latestDependencies = Get-NpmViewJson -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'dependencies', '--json')
+    if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $GlobalPiCodingAgentVersion)) {
+        throw "Fallback package version is not available: @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion"
+    }
+
+    $latestVersionText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'version', '--json')
+    $latestVersion = if ($latestVersionText) { $latestVersionText.Trim('"') } else { $null }
+
     $latestPiAiRange = $null
-    if ($latestDependencies -and $latestDependencies.PSObject.Properties.Name -contains '@mariozechner/pi-ai') {
-        $latestPiAiRange = [string]$latestDependencies.'@mariozechner/pi-ai'
+    if ($latestVersion) {
+        $latestDependenciesText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', ("@mariozechner/pi-coding-agent@" + $latestVersion), 'dependencies', '--json')
+        if ($latestDependenciesText -match '"@mariozechner/pi-ai"\s*:\s*"([^"]+)"') {
+            $latestPiAiRange = $Matches[1]
+        }
     }
 
     $fallbackNeeded = $false
     if ($latestPiAiRange -match '(\d+\.\d+\.\d+)') {
         $latestPiAiVersion = $Matches[1]
         if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-ai' -Version $latestPiAiVersion)) {
-            Write-Warning "Latest @mariozechner/pi-coding-agent depends on @mariozechner/pi-ai $latestPiAiRange, but that version is not published. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
+            Write-Warning "Latest @mariozechner/pi-coding-agent@$latestVersion depends on @mariozechner/pi-ai $latestPiAiRange, but that version is not published. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
             $fallbackNeeded = $true
         }
     }
+    elseif (-not $latestVersion) {
+        Write-Warning "Could not reliably determine the latest @mariozechner/pi-coding-agent version from npm. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
+        $fallbackNeeded = $true
+    }
 
     if (-not $fallbackNeeded) {
-        Invoke-WithRetry -Description 'npm install -g @mariozechner/pi-coding-agent' -Action {
+        try {
+            Write-Info 'Trying latest @mariozechner/pi-coding-agent once before fallback validation.'
             Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
-        return
+            return
+        }
+        catch {
+            Write-Warning "Installing latest @mariozechner/pi-coding-agent failed. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion. Error: $($_.Exception.Message)"
+        }
     }
+
+    Write-Info 'Preparing a clean fallback install state for the global pi-coding-agent package.'
+    Remove-StaleGlobalPiCodingAgent -NpmExe $NpmExe
 
     Invoke-WithRetry -Description "npm install -g @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion" -Action {
         Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@" + $GlobalPiCodingAgentVersion), '--no-fund', '--no-audit')
