@@ -30,6 +30,10 @@ $PinnedVersions = [ordered]@{
     'pi-web-access'  = '0.10.6'
 }
 
+# Intentionally pinned: npm currently resolves the latest pi-coding-agent release
+# to @mariozechner/pi-ai@^0.67.4, but that package version is not published.
+$GlobalPiCodingAgentVersion = '0.67.3'
+
 $PackageNames = @($PinnedVersions.Keys)
 
 function Write-Step {
@@ -119,6 +123,78 @@ function Invoke-WithRetry {
             Start-Sleep -Seconds $DelaySeconds
         }
     }
+}
+
+function Get-NpmViewJson {
+    param(
+        [Parameter(Mandatory = $true)][string]$NpmExe,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $output = & $NpmExe @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+
+    $text = ($output | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return $null
+    }
+
+    try {
+        return ($text | ConvertFrom-Json)
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-NpmPackageVersionExists {
+    param(
+        [Parameter(Mandatory = $true)][string]$NpmExe,
+        [Parameter(Mandatory = $true)][string]$PackageName,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    $result = & $NpmExe 'view' ("$PackageName@$Version") 'version' '--json' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    $text = ($result | Out-String).Trim().Trim('"')
+    return $text -eq $Version
+}
+
+function Install-GlobalPiCodingAgent {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
+    Write-Step 'Installing or updating pi-coding-agent globally'
+
+    $latestDependencies = Get-NpmViewJson -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'dependencies', '--json')
+    $latestPiAiRange = $null
+    if ($latestDependencies -and $latestDependencies.PSObject.Properties.Name -contains '@mariozechner/pi-ai') {
+        $latestPiAiRange = [string]$latestDependencies.'@mariozechner/pi-ai'
+    }
+
+    $fallbackNeeded = $false
+    if ($latestPiAiRange -match '(\d+\.\d+\.\d+)') {
+        $latestPiAiVersion = $Matches[1]
+        if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-ai' -Version $latestPiAiVersion)) {
+            Write-Warning "Latest @mariozechner/pi-coding-agent depends on @mariozechner/pi-ai $latestPiAiRange, but that version is not published. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
+            $fallbackNeeded = $true
+        }
+    }
+
+    if (-not $fallbackNeeded) {
+        Invoke-WithRetry -Description 'npm install -g @mariozechner/pi-coding-agent' -Action {
+            Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+        return
+    }
+
+    Invoke-WithRetry -Description "npm install -g @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion" -Action {
+        Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@" + $GlobalPiCodingAgentVersion), '--no-fund', '--no-audit')
+    } -MaxAttempts 3 -DelaySeconds 5
 }
 
 function Invoke-WingetInstall {
@@ -342,10 +418,7 @@ try {
         Write-Warning 'Python was not found. mempalace-pi may require a manual Python installation later.'
     }
 
-    Write-Step 'Installing or updating pi-coding-agent globally'
-    Invoke-WithRetry -Description 'npm install -g @mariozechner/pi-coding-agent' -Action {
-        Invoke-External -FilePath $npmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
-    } -MaxAttempts 3 -DelaySeconds 5
+    Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
 
     $piExe = Get-PiExecutable
