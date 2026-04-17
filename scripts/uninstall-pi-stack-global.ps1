@@ -18,8 +18,9 @@ $PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
 $LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
-$GlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
-$GlobalAgentsPath = Join-Path $GlobalAgentsDir 'AGENTS.md'
+$GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
+$LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
+$LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
 $GlobalUninstallLogDir = Join-Path $UserProfilePath '.pi\logs'
 $GlobalUninstallLogPath = Join-Path $GlobalUninstallLogDir ('global-uninstall-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
@@ -207,6 +208,24 @@ function Remove-GeneratedAgentsSection {
     }
 }
 
+function Remove-LegacyGlobalAgentsArtifacts {
+    if (Test-Path -LiteralPath $LegacyGlobalAgentsPath) {
+        Remove-PathSafe -Path $LegacyGlobalAgentsPath
+    }
+
+    if (Test-Path -LiteralPath $LegacyGlobalAgentsDir) {
+        try {
+            $remainingEntries = @(Get-ChildItem -LiteralPath $LegacyGlobalAgentsDir -Force -ErrorAction Stop)
+            if ($remainingEntries.Count -eq 0) {
+                Remove-PathSafe -Path $LegacyGlobalAgentsDir
+            }
+        }
+        catch {
+            Write-Warning "Could not inspect legacy global agents directory '$LegacyGlobalAgentsDir': $($_.Exception.Message)"
+        }
+    }
+}
+
 Ensure-Directory -Path $GlobalUninstallLogDir
 
 try {
@@ -261,6 +280,7 @@ try {
     if (-not $KeepGlobalAgents) {
         Write-Step 'Cleaning global AGENTS.md'
         Remove-GeneratedAgentsSection -Path $GlobalAgentsPath
+        Remove-LegacyGlobalAgentsArtifacts
     }
     else {
         Write-Info 'Keeping global AGENTS.md.'

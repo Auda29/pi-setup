@@ -310,7 +310,7 @@ The target folder will contain, among other things:
 
 The global installer also writes shared agent guidance to:
 
-- `%USERPROFILE%\.pi\agents\AGENTS.md`
+- `%USERPROFILE%\.pi\agent\AGENTS.md`
 
 ## Complete global workflow example
 

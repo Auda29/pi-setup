@@ -27,8 +27,9 @@ $LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
-$GlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
-$GlobalAgentsPath = Join-Path $GlobalAgentsDir 'AGENTS.md'
+$GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
+$LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
+$LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
 
 $PinnedVersions = [ordered]@{
     'mempalace-pi'   = '0.2.0'
@@ -119,6 +120,31 @@ This file contains instructions for coding agents working with this Pi installat
     else {
         $separator = if ($existing.EndsWith("`n")) { "" } else { "`r`n" }
         Set-Content -LiteralPath $Path -Value ($existing + $separator + "`r`n" + $block) -Encoding UTF8
+    }
+}
+
+function Remove-LegacyGlobalAgentsPath {
+    if (Test-Path -LiteralPath $LegacyGlobalAgentsPath) {
+        try {
+            Remove-Item -LiteralPath $LegacyGlobalAgentsPath -Force -ErrorAction Stop
+            Write-Info "Removed legacy global AGENTS.md: $LegacyGlobalAgentsPath"
+        }
+        catch {
+            Write-Warning "Could not remove legacy global AGENTS.md '$LegacyGlobalAgentsPath': $($_.Exception.Message)"
+        }
+    }
+
+    if (Test-Path -LiteralPath $LegacyGlobalAgentsDir) {
+        try {
+            $remainingEntries = @(Get-ChildItem -LiteralPath $LegacyGlobalAgentsDir -Force -ErrorAction Stop)
+            if ($remainingEntries.Count -eq 0) {
+                Remove-Item -LiteralPath $LegacyGlobalAgentsDir -Force -ErrorAction Stop
+                Write-Info "Removed empty legacy global agents directory: $LegacyGlobalAgentsDir"
+            }
+        }
+        catch {
+            Write-Warning "Could not clean legacy global agents directory '$LegacyGlobalAgentsDir': $($_.Exception.Message)"
+        }
     }
 }
 
@@ -702,7 +728,6 @@ try {
     Ensure-Directory -Path $BackupsDir
     Ensure-Directory -Path $GlobalPiAgentDir
     Ensure-Directory -Path $GlobalPiAgentBackupsDir
-    Ensure-Directory -Path $GlobalAgentsDir
 
     try {
         Start-Transcript -Path $InstallLogPath -Force | Out-Null
@@ -893,7 +918,7 @@ What is included
 - global @mariozechner/pi-coding-agent
 - centrally installed Pi extensions in .pi-packages
 - global Pi settings in %USERPROFILE%\.pi\agent\settings.json
-- global agent guidance in %USERPROFILE%\.pi\agents\AGENTS.md
+- global agent guidance in %USERPROFILE%\.pi\agent\AGENTS.md
 - install-root Pi settings in .pi\settings.json
 - install-root Windows start script in scripts\start-pi.ps1
 - install logs in .pi\logs\
@@ -907,7 +932,7 @@ Important files
 - README-global-pi-stack.txt
 - .pi\logs\
 - %USERPROFILE%\.pi\agent\settings.json
-- %USERPROFILE%\.pi\agents\AGENTS.md
+- %USERPROFILE%\.pi\agent\AGENTS.md
 
 Recommended usage
 -----------------
@@ -935,7 +960,7 @@ If something goes wrong
 2. Verify that pi, node, npm, and git are available
 3. Confirm that Git Bash exists and that both .pi\settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
 4. If Python-based features fail, verify that Python is installed and that `py -3 -c "import mempalace, mempalace.mcp_server"` works
-5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agents\AGENTS.md
+5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agent\AGENTS.md
 
 Installed packages
 ------------------
@@ -962,6 +987,7 @@ Installed packages
     Write-Step 'Writing global AGENTS.md'
     $agentsMdContent = Get-AgentsMdContent -IncludeTwinCATAds:$IncludeTwinCATAds
     Set-GeneratedAgentsSection -Path $GlobalAgentsPath -GeneratedContent $agentsMdContent
+    Remove-LegacyGlobalAgentsPath
     Write-Info "Global AGENTS.md: $GlobalAgentsPath"
 
     Write-Step 'Done'
