@@ -516,7 +516,8 @@ function Save-JsonObject {
 
     Ensure-Directory -Path (Split-Path -Parent $Path)
     $json = $Data | ConvertTo-Json -Depth 100
-    Set-Content -LiteralPath $Path -Value ($json + "`n") -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, ($json + "`n"), $utf8NoBom)
 }
 
 function Backup-IfExists {
