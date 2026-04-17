@@ -763,7 +763,7 @@ try {
     Backup-IfExists -Path $SettingsPath
     $settings = Load-JsonObject -Path $SettingsPath
 
-    $settings['npmCommand'] = @($npmExe)
+    $settings['npmCommand'] = @('npm.cmd')
     $settings['shellPath'] = $gitBashPath
     $settings['sessionDir'] = '.pi/sessions'
     Save-JsonObject -Path $SettingsPath -Data $settings

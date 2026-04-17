@@ -913,7 +913,7 @@ try {
 
     Write-Step 'Writing install-root and global Pi settings'
     $installRootSettings = [ordered]@{
-        npmCommand = @($npmExe)
+        npmCommand = @('npm.cmd')
         shellPath  = $gitBashPath
         sessionDir = 'sessions'
     }
@@ -926,7 +926,7 @@ try {
     }
 
     $globalSettings = Load-JsonObject -Path $GlobalPiAgentSettingsPath
-    $globalSettings['npmCommand'] = @($npmExe)
+    $globalSettings['npmCommand'] = @('npm.cmd')
     $globalSettings['shellPath'] = $gitBashPath
     if (-not (Test-MapHasKey -Map $globalSettings -Key 'sessionDir') -or [string]::IsNullOrWhiteSpace([string]$globalSettings['sessionDir'])) {
         $globalSettings['sessionDir'] = '.pi/sessions'
