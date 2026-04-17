@@ -750,6 +750,24 @@ function Assert-PackageInstalled {
     }
 }
 
+function Install-TwinCATAdsPackage {
+    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        Write-Step 'Installing pi-twincat-ads from npm'
+        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
+            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', 'pi-twincat-ads', '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
+    else {
+        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
+        Write-Step 'Installing pi-twincat-ads from local path'
+        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
+            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
+
+    Assert-PackageInstalled -PackageName 'pi-twincat-ads'
+}
+
 Ensure-Directory -Path $PiDir
 Ensure-Directory -Path $LogsDir
 
@@ -844,16 +862,7 @@ try {
     }
 
     if ($IncludeTwinCATAds) {
-        if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-            throw 'If -IncludeTwinCATAds is set, -TwinCATAdsSource must also be provided.'
-        }
-
-        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
-        Write-Step 'Installing pi-twincat-ads from local path'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
-        Assert-PackageInstalled -PackageName 'pi-twincat-ads'
+        Install-TwinCATAdsPackage
     }
 
     Write-Step 'Writing robust Pi project configuration'

@@ -701,6 +701,26 @@ function Assert-PackageInstalled {
     }
 }
 
+function Install-TwinCATAdsPackage {
+    param([Parameter(Mandatory = $true)][string]$PackagesDir)
+
+    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        Write-Step 'Installing pi-twincat-ads from npm'
+        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
+            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', 'pi-twincat-ads', '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
+    else {
+        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
+        Write-Step 'Installing pi-twincat-ads from local path'
+        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
+            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
+
+    Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName 'pi-twincat-ads'
+}
+
 if (-not $IsWindowsPlatform) {
     throw 'This global script is intended for Windows.'
 }
@@ -814,16 +834,7 @@ try {
     }
 
     if ($IncludeTwinCATAds) {
-        if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-            throw 'If -IncludeTwinCATAds is set, -TwinCATAdsSource must also be provided.'
-        }
-
-        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
-        Write-Step 'Installing pi-twincat-ads from local path'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
-        Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName 'pi-twincat-ads'
+        Install-TwinCATAdsPackage -PackagesDir $PackagesDir
     }
 
     Write-Step 'Writing install-root and global Pi settings'

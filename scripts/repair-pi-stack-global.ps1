@@ -204,10 +204,9 @@ try {
     $arguments = @('-ExecutionPolicy', 'Bypass', '-File', $installScript, '-InstallRoot', $ResolvedInstallRoot)
     if ($IncludeTwinCATAds) {
         $arguments += '-IncludeTwinCATAds'
-        if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-            throw 'If -IncludeTwinCATAds is set, -TwinCATAdsSource must also be provided.'
+        if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+            $arguments += @('-TwinCATAdsSource', $TwinCATAdsSource)
         }
-        $arguments += @('-TwinCATAdsSource', $TwinCATAdsSource)
     }
     if ($RequirePython) { $arguments += '-RequirePython' }
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }

@@ -39,7 +39,7 @@ Stack components:
 - `pi-lens`
 - `pi-web-access`
 - `mempalace-pi`
-- optionally later `pi-twincat-ads`
+- optionally `pi-twincat-ads`
 
 Goal: a setup that works as reproducibly as possible on both **fresh Windows systems** and machines with an **existing Pi installation**.
 
@@ -156,9 +156,18 @@ If you intentionally want to use `latest` instead:
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UseLatestPackageVersions
 ```
 
-### Install local `pi-twincat-ads`
+### Include `pi-twincat-ads` from npm
 
-As soon as your package exists locally:
+If you want the TwinCAT ADS package installed from npm:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
+  -IncludeTwinCATAds
+```
+
+### Include local `pi-twincat-ads` source
+
+If you want to test a local checkout instead of the published npm package:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
@@ -299,6 +308,7 @@ Supported extra options mostly match the normal installer:
 
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
 - `-UseLatestPackageVersions`
+- `-IncludeTwinCATAds`
 - `-IncludeTwinCATAds -TwinCATAdsSource <path>`
 
 The target folder will contain, among other things:
@@ -346,7 +356,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -UseLatestPackageVersions
 ```
 
-### 5. Optional: include a local `pi-twincat-ads`
+### 5. Optional: include `pi-twincat-ads` from npm
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
+  -InstallRoot C:\Tools\pi-stack `
+  -IncludeTwinCATAds
+```
+
+### 6. Optional: include local `pi-twincat-ads` source
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
@@ -379,7 +397,14 @@ With a hard reset of local npm artifacts:
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCleanNodeModules
 ```
 
-With local `pi-twincat-ads`:
+With `pi-twincat-ads` from npm:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
+  -IncludeTwinCATAds
+```
+
+With local `pi-twincat-ads` source:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
