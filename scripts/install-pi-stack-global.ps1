@@ -26,6 +26,7 @@ $PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
 $LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
+$GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
 $GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
 $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
@@ -701,6 +702,45 @@ function Assert-PackageInstalled {
     }
 }
 
+function Test-PiAuthenticated {
+    if (-not (Test-Path -LiteralPath $GlobalPiAgentAuthPath)) {
+        return $false
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $GlobalPiAgentAuthPath -Raw -Encoding UTF8
+        return -not [string]::IsNullOrWhiteSpace($raw)
+    }
+    catch {
+        Write-Warning "Could not inspect Pi auth state at '$GlobalPiAgentAuthPath': $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Start-PiLoginIfNeeded {
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+
+    if (Test-PiAuthenticated) {
+        Write-Info 'Pi authentication already present. Skipping automatic /login.'
+        return
+    }
+
+    Write-Step 'Starting pi /login for first-time authentication'
+    Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
+    & $PiExecutablePath '/login'
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "pi /login exited with code $LASTEXITCODE."
+        return
+    }
+
+    if (Test-PiAuthenticated) {
+        Write-Info 'Pi authentication completed successfully.'
+    }
+    else {
+        Write-Warning 'pi /login finished, but no auth.json was detected afterwards.'
+    }
+}
+
 function Install-TwinCATAdsPackage {
     param([Parameter(Mandatory = $true)][string]$PackagesDir)
 
@@ -1011,6 +1051,8 @@ Installed packages
     Write-Host 'Start with:'
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
     Write-Host 'Or start pi from another repo/editor; the global Pi settings were updated as well.'
+
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe
 }
 catch {
     $ScriptExitCode = 1

@@ -64,6 +64,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 8. creates backups of existing settings
 9. creates a Windows start script: `scripts/start-pi.ps1`
 10. writes an install log to `.pi/logs/`
+11. starts `pi /login` automatically if `%USERPROFILE%\.pi\agent\auth.json` is not present yet
 
 ## Why this approach?
 
@@ -127,6 +128,8 @@ This sets the following for the session:
 - `PYTHONIOENCODING=utf-8`
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
+
+If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts start `pi /login` automatically at the end so authentication can happen immediately in the same terminal.
 
 ## Installer options
 

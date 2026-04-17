@@ -19,6 +19,9 @@ else {
 
 $InstallerScriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
 $ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
+$UserProfilePath = [Environment]::GetFolderPath('UserProfile')
+$GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
+$GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
 $PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
@@ -750,6 +753,45 @@ function Assert-PackageInstalled {
     }
 }
 
+function Test-PiAuthenticated {
+    if (-not (Test-Path -LiteralPath $GlobalPiAgentAuthPath)) {
+        return $false
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $GlobalPiAgentAuthPath -Raw -Encoding UTF8
+        return -not [string]::IsNullOrWhiteSpace($raw)
+    }
+    catch {
+        Write-Warning "Could not inspect Pi auth state at '$GlobalPiAgentAuthPath': $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Start-PiLoginIfNeeded {
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+
+    if (Test-PiAuthenticated) {
+        Write-Info 'Pi authentication already present. Skipping automatic /login.'
+        return
+    }
+
+    Write-Step 'Starting pi /login for first-time authentication'
+    Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
+    & $PiExecutablePath '/login'
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "pi /login exited with code $LASTEXITCODE."
+        return
+    }
+
+    if (Test-PiAuthenticated) {
+        Write-Info 'Pi authentication completed successfully.'
+    }
+    else {
+        Write-Warning 'pi /login finished, but no auth.json was detected afterwards.'
+    }
+}
+
 function Install-TwinCATAdsPackage {
     if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         Write-Step 'Installing pi-twincat-ads from npm'
@@ -958,6 +1000,8 @@ exit `$LASTEXITCODE
     Write-Host "`nRecommended startup on Windows from the target repo:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1"
     Write-Host "  # target repo: $ResolvedProjectRoot"
+
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe
 }
 catch {
     $ScriptExitCode = 1
