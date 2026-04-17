@@ -192,7 +192,8 @@ function Remove-UnwantedGlobalProjectArtifacts {
 
     $artifactPaths = @(
         (Join-Path $InstallRootPath '.pi'),
-        (Join-Path $InstallRootPath '.pi-lens')
+        (Join-Path $InstallRootPath '.pi-lens'),
+        (Join-Path $InstallRootPath 'settings.json')
     )
 
     foreach ($artifactPath in $artifactPaths) {
@@ -555,6 +556,34 @@ function Invoke-WingetInstall {
     Refresh-ProcessPath
 }
 
+function Invoke-WingetUpgrade {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageId,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    $winget = Get-CommandPathSafe -Name 'winget'
+    if (-not $winget) {
+        Write-Warning "winget is not available, so '$DisplayName' could not be checked for updates."
+        return
+    }
+
+    Write-Step "Checking for updates for $DisplayName via winget"
+    try {
+        Invoke-WithRetry -Description "winget upgrade $PackageId" -Action {
+            Invoke-External -FilePath $winget -Arguments @(
+                'upgrade', '--id', $PackageId, '--exact', '--silent',
+                '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity',
+                '--include-unknown'
+            )
+        } -MaxAttempts 2 -DelaySeconds 5
+        Refresh-ProcessPath
+    }
+    catch {
+        Write-Warning "Could not update '$DisplayName' via winget: $($_.Exception.Message)"
+    }
+}
+
 function Ensure-Command {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -564,6 +593,9 @@ function Ensure-Command {
     )
 
     if (Test-CommandExists -Name $Name) {
+        if ($WingetPackageId) {
+            Invoke-WingetUpgrade -PackageId $WingetPackageId -DisplayName $DisplayName
+        }
         return (Get-CommandPathSafe -Name $Name)
     }
 
@@ -850,7 +882,6 @@ try {
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
     $LogsDir = Join-Path $ResolvedInstallRoot 'logs'
     $BackupsDir = Join-Path $ResolvedInstallRoot 'backups'
-    $SettingsPath = Join-Path $ResolvedInstallRoot 'settings.json'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
     $ReadmePath = Join-Path $ResolvedInstallRoot 'README-global-pi-stack.txt'
     $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -932,14 +963,7 @@ try {
         Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
-    Write-Step 'Writing install-root and global Pi settings'
-    $installRootSettings = [ordered]@{
-        npmCommand = @('npm.cmd')
-        shellPath  = $gitBashPath
-        sessionDir = 'sessions'
-    }
-    Save-JsonObject -Path $SettingsPath -Data $installRootSettings
-
+    Write-Step 'Writing global Pi settings'
     if (Test-Path -LiteralPath $GlobalPiAgentSettingsPath) {
         $globalSettingsBackupPath = Join-Path $GlobalPiAgentBackupsDir ('settings-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json.bak')
         Copy-Item -LiteralPath $GlobalPiAgentSettingsPath -Destination $globalSettingsBackupPath -Force
@@ -1000,14 +1024,12 @@ What is included
 - globally installed Pi packages via `pi install`
 - global Pi settings in %USERPROFILE%\.pi\agent\settings.json
 - global agent guidance in %USERPROFILE%\.pi\agent\AGENTS.md
-- install-root Pi settings in settings.json
 - install-root Windows start script in scripts\start-pi.ps1
 - install logs in logs\
 
 Important files
 ---------------
 
-- settings.json
 - scripts\start-pi.ps1
 - README-global-pi-stack.txt
 - logs\
@@ -1038,7 +1060,7 @@ If something goes wrong
 
 1. Check the latest file in logs\
 2. Verify that pi, node, npm, and git are available
-3. Confirm that Git Bash exists and that both settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
+3. Confirm that Git Bash exists and that %USERPROFILE%\.pi\agent\settings.json points to a valid bash.exe
 4. If Python-based features fail, verify that Python is installed and that `py -3 -c "import mempalace, mempalace.mcp_server"` works
 5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agent\AGENTS.md
 

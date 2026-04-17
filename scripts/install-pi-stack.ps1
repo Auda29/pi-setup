@@ -376,6 +376,34 @@ function Invoke-WingetInstall {
     Refresh-ProcessPath
 }
 
+function Invoke-WingetUpgrade {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageId,
+        [Parameter(Mandatory = $true)][string]$DisplayName
+    )
+
+    $winget = Get-CommandPathSafe -Name 'winget'
+    if (-not $winget) {
+        Write-Warning "winget is not available, so '$DisplayName' could not be checked for updates."
+        return
+    }
+
+    Write-Step "Checking for updates for $DisplayName via winget"
+    try {
+        Invoke-WithRetry -Description "winget upgrade $PackageId" -Action {
+            Invoke-External -FilePath $winget -Arguments @(
+                'upgrade', '--id', $PackageId, '--exact', '--silent',
+                '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity',
+                '--include-unknown'
+            )
+        } -MaxAttempts 2 -DelaySeconds 5
+        Refresh-ProcessPath
+    }
+    catch {
+        Write-Warning "Could not update '$DisplayName' via winget: $($_.Exception.Message)"
+    }
+}
+
 function Ensure-Command {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -385,6 +413,9 @@ function Ensure-Command {
     )
 
     if (Test-CommandExists -Name $Name) {
+        if ($WingetPackageId) {
+            Invoke-WingetUpgrade -PackageId $WingetPackageId -DisplayName $DisplayName
+        }
         return (Get-CommandPathSafe -Name $Name)
     }
 

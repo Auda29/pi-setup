@@ -48,7 +48,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 `scripts/install-pi-stack.ps1` does the following in the folder/repo you run it from:
 
 1. checks whether it is running on Windows
-2. installs missing prerequisites via `winget` when possible
+2. installs missing prerequisites via `winget` when possible and updates already installed prerequisites to the newest available `winget` version
    - Node.js LTS
    - Git for Windows
    - Python 3 for `mempalace-pi`
@@ -150,7 +150,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -Require
 
 ### Use latest package versions instead of pinned versions
 
-By default, this setup uses pinned versions for better reproducibility.
+By default, this setup uses pinned Pi package versions for better reproducibility.
+
+At the same time, the install scripts now try to keep everything they install up to date on each run:
+
+- existing `winget`-managed prerequisites such as Node.js, Git, and Python are checked with `winget upgrade`
+- the Python `mempalace` backend is refreshed via `pip install --upgrade`
+- Pi packages are reinstalled through `pi install` according to the selected version policy
 
 If you intentionally want to use `latest` instead:
 
@@ -215,6 +221,16 @@ This makes it more likely to survive:
 - short network issues
 - registry hiccups
 - temporary npm or winget outages
+
+## Update behavior
+
+Running `install-pi-stack.ps1`, `install-pi-stack-global.ps1`, or the corresponding repair scripts refreshes the installed stack instead of only skipping existing tools.
+
+- Existing prerequisites managed through `winget` are upgraded when an update is available.
+- `mempalace` is always updated with `pip install --upgrade mempalace`.
+- `@mariozechner/pi-coding-agent` is reinstalled to the currently configured supported version.
+- Pi packages are reinstalled through `pi install`.
+- With `-UseLatestPackageVersions`, the Pi packages are resolved to the latest npm versions instead of the pinned defaults.
 
 ## Important files
 
@@ -300,7 +316,6 @@ Supported extra options mostly match the normal installer:
 
 The target folder will contain, among other things:
 
-- `settings.json`
 - `scripts\start-pi.ps1`
 - `README-global-pi-stack.txt`
 
