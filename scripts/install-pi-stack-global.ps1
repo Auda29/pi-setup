@@ -149,6 +149,44 @@ function Remove-LegacyGlobalAgentsPath {
     }
 }
 
+function Migrate-LegacyGlobalInstallLayout {
+    param([Parameter(Mandatory = $true)][string]$InstallRootPath)
+
+    $legacyPiDir = Join-Path $InstallRootPath '.pi'
+    if (-not (Test-Path -LiteralPath $legacyPiDir)) {
+        return
+    }
+
+    $moves = @(
+        @{ Source = (Join-Path $legacyPiDir 'settings.json'); Destination = (Join-Path $InstallRootPath 'settings.json') },
+        @{ Source = (Join-Path $legacyPiDir 'logs'); Destination = (Join-Path $InstallRootPath 'logs') },
+        @{ Source = (Join-Path $legacyPiDir 'backups'); Destination = (Join-Path $InstallRootPath 'backups') }
+    )
+
+    foreach ($move in $moves) {
+        if ((Test-Path -LiteralPath $move.Source) -and -not (Test-Path -LiteralPath $move.Destination)) {
+            try {
+                Move-Item -LiteralPath $move.Source -Destination $move.Destination -Force -ErrorAction Stop
+                Write-Info "Migrated legacy global stack path: $($move.Source) -> $($move.Destination)"
+            }
+            catch {
+                Write-Warning "Could not migrate legacy global stack path '$($move.Source)': $($_.Exception.Message)"
+            }
+        }
+    }
+
+    try {
+        $remainingEntries = @(Get-ChildItem -LiteralPath $legacyPiDir -Force -ErrorAction Stop)
+        if ($remainingEntries.Count -eq 0) {
+            Remove-Item -LiteralPath $legacyPiDir -Force -ErrorAction Stop
+            Write-Info "Removed empty legacy nested stack directory: $legacyPiDir"
+        }
+    }
+    catch {
+        Write-Warning "Could not clean legacy nested stack directory '$legacyPiDir': $($_.Exception.Message)"
+    }
+}
+
 function Get-AgentsMdContent {
     param([switch]$IncludeTwinCATAds)
 
@@ -784,17 +822,16 @@ try {
     $InstallRoot = Resolve-DefaultGlobalInstallRoot -RequestedPath $InstallRoot
     Ensure-Directory -Path $InstallRoot
     $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
+    Migrate-LegacyGlobalInstallLayout -InstallRootPath $ResolvedInstallRoot
 
-    $PiDir = Join-Path $ResolvedInstallRoot '.pi'
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
-    $LogsDir = Join-Path $PiDir 'logs'
-    $BackupsDir = Join-Path $PiDir 'backups'
-    $SettingsPath = Join-Path $PiDir 'settings.json'
+    $LogsDir = Join-Path $ResolvedInstallRoot 'logs'
+    $BackupsDir = Join-Path $ResolvedInstallRoot 'backups'
+    $SettingsPath = Join-Path $ResolvedInstallRoot 'settings.json'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
     $ReadmePath = Join-Path $ResolvedInstallRoot 'README-global-pi-stack.txt'
     $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
-    Ensure-Directory -Path $PiDir
     Ensure-Directory -Path $ScriptsDir
     Ensure-Directory -Path $LogsDir
     Ensure-Directory -Path $BackupsDir
@@ -877,7 +914,7 @@ try {
     $installRootSettings = [ordered]@{
         npmCommand = @($npmExe)
         shellPath  = $gitBashPath
-        sessionDir = '.pi/sessions'
+        sessionDir = 'sessions'
     }
     Save-JsonObject -Path $SettingsPath -Data $installRootSettings
 
@@ -945,17 +982,17 @@ What is included
 - globally installed Pi packages via `pi install`
 - global Pi settings in %USERPROFILE%\.pi\agent\settings.json
 - global agent guidance in %USERPROFILE%\.pi\agent\AGENTS.md
-- install-root Pi settings in .pi\settings.json
+- install-root Pi settings in settings.json
 - install-root Windows start script in scripts\start-pi.ps1
-- install logs in .pi\logs\
+- install logs in logs\
 
 Important files
 ---------------
 
-- .pi\settings.json
+- settings.json
 - scripts\start-pi.ps1
 - README-global-pi-stack.txt
-- .pi\logs\
+- logs\
 - %USERPROFILE%\.pi\agent\settings.json
 - %USERPROFILE%\.pi\agent\AGENTS.md
 
@@ -981,9 +1018,9 @@ That is especially useful on Windows, in particular for mempalace-pi. The instal
 If something goes wrong
 -----------------------
 
-1. Check the latest file in .pi\logs\
+1. Check the latest file in logs\
 2. Verify that pi, node, npm, and git are available
-3. Confirm that Git Bash exists and that both .pi\settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
+3. Confirm that Git Bash exists and that both settings.json and %USERPROFILE%\.pi\agent\settings.json point to a valid bash.exe
 4. If Python-based features fail, verify that Python is installed and that `py -3 -c "import mempalace, mempalace.mcp_server"` works
 5. If global editor integration is missing, inspect %USERPROFILE%\.pi\agent\settings.json and %USERPROFILE%\.pi\agent\AGENTS.md
 

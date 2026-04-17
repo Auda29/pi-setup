@@ -303,7 +303,7 @@ Supported extra options mostly match the normal installer:
 
 The target folder will contain, among other things:
 
-- `.pi\settings.json`
+- `settings.json`
 - `scripts\start-pi.ps1`
 - `README-global-pi-stack.txt`
 
@@ -477,7 +477,7 @@ Keep the install root, global settings, or global agent instructions:
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-pi-stack-global.ps1 -KeepInstallRoot -KeepGlobalSettings -KeepGlobalAgents
 ```
 
-Local scripts write logs to `.pi/logs/`. Global scripts write logs to `%USERPROFILE%\.pi\logs\`.
+Local scripts write logs to `.pi/logs/`. Global scripts write logs to `%USERPROFILE%\.pi\logs\`, while the stack-specific install logs live under `%USERPROFILE%\.pi\stack\logs\`.
 
 ## License
 
