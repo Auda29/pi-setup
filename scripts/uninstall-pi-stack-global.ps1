@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
-    [string]$InstallRoot = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi-stack'),
+    [string]$InstallRoot = '',
     [switch]$RemoveGlobalPi,
     [switch]$KeepInstallRoot,
     [switch]$KeepGlobalSettings,
@@ -14,6 +14,8 @@ $ScriptExitCode = 0
 $TranscriptStarted = $false
 $ResolvedInstallRoot = $null
 $UserProfilePath = [Environment]::GetFolderPath('UserProfile')
+$PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
+$LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
@@ -41,6 +43,25 @@ function Ensure-Directory {
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
+}
+
+function Resolve-DefaultGlobalInstallRoot {
+    param([string]$RequestedPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
+        return $RequestedPath
+    }
+
+    if (Test-Path -LiteralPath $PreferredGlobalInstallRoot) {
+        return $PreferredGlobalInstallRoot
+    }
+
+    if (Test-Path -LiteralPath $LegacyGlobalInstallRoot) {
+        Write-Warning "Using legacy global install root '$LegacyGlobalInstallRoot'. Pass -InstallRoot explicitly if you want to migrate to '$PreferredGlobalInstallRoot'."
+        return $LegacyGlobalInstallRoot
+    }
+
+    return $PreferredGlobalInstallRoot
 }
 
 function Get-CommandPathSafe {
@@ -197,6 +218,7 @@ try {
         Write-Warning "Could not start transcript: $($_.Exception.Message)"
     }
 
+    $InstallRoot = Resolve-DefaultGlobalInstallRoot -RequestedPath $InstallRoot
     if (Test-Path -LiteralPath $InstallRoot) {
         $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
     } else {

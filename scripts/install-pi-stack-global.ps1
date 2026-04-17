@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$InstallRoot = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi-stack'),
+    [string]$InstallRoot = '',
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
@@ -22,6 +22,8 @@ $ScriptExitCode = 0
 $ResolvedInstallRoot = $null
 $GlobalScriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
 $UserProfilePath = [Environment]::GetFolderPath('UserProfile')
+$PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
+$LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
@@ -62,6 +64,25 @@ function Ensure-Directory {
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
+}
+
+function Resolve-DefaultGlobalInstallRoot {
+    param([string]$RequestedPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
+        return $RequestedPath
+    }
+
+    if (Test-Path -LiteralPath $PreferredGlobalInstallRoot) {
+        return $PreferredGlobalInstallRoot
+    }
+
+    if (Test-Path -LiteralPath $LegacyGlobalInstallRoot) {
+        Write-Warning "Using legacy global install root '$LegacyGlobalInstallRoot'. Pass -InstallRoot explicitly if you want to migrate to '$PreferredGlobalInstallRoot'."
+        return $LegacyGlobalInstallRoot
+    }
+
+    return $PreferredGlobalInstallRoot
 }
 
 function Set-GeneratedAgentsSection {
@@ -659,6 +680,7 @@ if (-not $IsWindowsPlatform) {
 }
 
 try {
+    $InstallRoot = Resolve-DefaultGlobalInstallRoot -RequestedPath $InstallRoot
     Ensure-Directory -Path $InstallRoot
     $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
 

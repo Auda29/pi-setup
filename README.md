@@ -19,7 +19,7 @@ Quick global setup:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1
-powershell -ExecutionPolicy Bypass -File $HOME\.pi-stack\scripts\start-pi.ps1
+powershell -ExecutionPolicy Bypass -File $HOME\.pi\stack\scripts\start-pi.ps1
 ```
 
 ## Overview
@@ -286,7 +286,9 @@ That makes the stack project-local, versionable, and easier to understand.
 
 `scripts/install-pi-stack-global.ps1` installs the shared Pi packages into a central folder and also updates the global Pi settings under `%USERPROFILE%\.pi\agent\settings.json`.
 
-The default target is `%USERPROFILE%\.pi-stack`. You can change the target via `-InstallRoot`:
+The default target is `%USERPROFILE%\.pi\stack`. If a legacy `%USERPROFILE%\.pi-stack` already exists, the scripts keep using it until you choose a different `-InstallRoot`.
+
+You can change the target via `-InstallRoot`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
