@@ -53,12 +53,11 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
    - Git for Windows
    - Python 3 for `mempalace-pi`
 3. installs or updates `@mariozechner/pi-coding-agent` globally
-4. installs the Pi extensions locally in `.pi-packages`
+4. installs the Pi packages with the official `pi install` workflow
 5. installs the Python package `mempalace` so `mempalace-pi` works on Windows out of the box
 6. writes a robust `.pi/settings.json`
    - `npmCommand`
    - `shellPath`
-   - `packages`
    - `sessionDir`
 7. creates or updates an `AGENTS.md` with tool guidance for coding agents
 8. creates backups of existing settings
@@ -68,7 +67,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 
 ## Why this approach?
 
-On Windows, the direct path via `pi install npm:...` is not always the least painful one. This setup therefore installs the extensions **locally via npm** and wires them into `.pi/settings.json` **via local package paths**.
+This setup now follows the official Pi package workflow and installs packages through `pi install`, so the agent can discover the installed extensions and tools the same way current Pi expects.
 
 For your use case, that is more stable, more reproducible, and easier to debug.
 
@@ -210,8 +209,8 @@ The script uses retries for the usual flaky operations:
 
 - `winget install`
 - `npm install -g @mariozechner/pi-coding-agent`
-- `npm install` in `.pi-packages`
-- optional `npm install` for `pi-twincat-ads`
+- `pi install npm:...`
+- optional `pi install` for `pi-twincat-ads`
 
 This makes it more likely to survive:
 
@@ -228,7 +227,6 @@ This makes it more likely to survive:
 - `scripts/repair-pi-stack-global.ps1` - repair a global setup
 - `scripts/uninstall-pi-stack.ps1` - remove the project-local setup
 - `scripts/uninstall-pi-stack-global.ps1` - remove or clean up a global setup
-- `.pi-packages/package.json` - local stack definition
 - `.pi/settings.json` - project-local Pi configuration
 - `.pi/backups/` - backups of existing settings
 - `.pi/logs/` - install/repair/uninstall logs
@@ -250,8 +248,7 @@ That is exactly what the script is built for:
 
 - existing `pi` is not blindly assumed, but updated
 - existing `.pi/settings.json` is backed up before being overwritten
-- existing `.pi-packages/package.json` is extended instead of being bluntly destroyed
-- package paths are deduplicated
+- existing package settings written by `pi install` remain managed through Pi's own package mechanism
 
 ## Common issues
 
@@ -280,23 +277,13 @@ Always start Pi via:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-## NPM / Pi wiring
+## Pi package wiring
 
-This repo uses **local package paths** in `.pi/settings.json`, for example:
-
-```json
-{
-  "packages": [
-    "../.pi-packages/node_modules/pi-subagents"
-  ]
-}
-```
-
-That makes the stack project-local, versionable, and easier to understand.
+This repo now installs Pi packages through the official CLI, for example `pi install npm:pi-subagents --local`, instead of writing `node_modules` paths into `.pi/settings.json` manually.
 
 ## Global installer
 
-`scripts/install-pi-stack-global.ps1` installs the shared Pi packages into a central folder and also updates the global Pi settings under `%USERPROFILE%\.pi\agent\settings.json`.
+`scripts/install-pi-stack-global.ps1` installs the shared Pi packages through global `pi install` calls and also updates the global Pi settings under `%USERPROFILE%\.pi\agent\settings.json`.
 
 The default target is `%USERPROFILE%\.pi\stack`. If a legacy `%USERPROFILE%\.pi-stack` already exists, the scripts keep using it until you choose a different `-InstallRoot`.
 
@@ -317,7 +304,6 @@ Supported extra options mostly match the normal installer:
 The target folder will contain, among other things:
 
 - `.pi\settings.json`
-- `.pi-packages\package.json`
 - `scripts\start-pi.ps1`
 - `README-global-pi-stack.txt`
 
@@ -380,7 +366,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
 
 ### Repair local setup
 
-If a local setup is half-broken, dependencies are missing, local npm artifacts are corrupted, or the MemPalace backend needs to be revalidated:
+If a local setup is half-broken, Pi packages need to be re-applied, or the MemPalace backend needs to be revalidated:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
@@ -394,11 +380,13 @@ The repair script targets the repo/folder you run it from. You can also point it
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ProjectRoot C:\path\to\repo
 ```
 
-With a hard reset of local npm artifacts:
+Legacy compatibility flag:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCleanNodeModules
 ```
+
+`-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
 With `pi-twincat-ads` from npm:
 
@@ -429,11 +417,13 @@ With a specific install root:
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1 -InstallRoot C:\Tools\pi-stack
 ```
 
-With a hard reset of global npm artifacts:
+Legacy compatibility flag:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack-global.ps1 -ForceCleanNodeModules
 ```
+
+`-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
 ### Uninstall local setup
 

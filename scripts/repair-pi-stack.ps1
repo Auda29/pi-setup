@@ -13,7 +13,6 @@ Set-StrictMode -Version Latest
 
 $InstallerScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
-$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
 $LogsDir = Join-Path $PiDir 'logs'
 $RepairLogPath = Join-Path $LogsDir ("repair-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -154,17 +153,7 @@ try {
     Write-Info "Repair log: $RepairLogPath"
 
     if ($ForceCleanNodeModules) {
-        Write-Step 'Cleaning broken local npm artifacts'
-        $nodeModulesPath = Join-Path $PackagesDir 'node_modules'
-        $packageLockPath = Join-Path $PackagesDir 'package-lock.json'
-        if (Test-Path -LiteralPath $nodeModulesPath) {
-            Remove-Item -LiteralPath $nodeModulesPath -Recurse -Force
-            Write-Info "Removed: $nodeModulesPath"
-        }
-        if (Test-Path -LiteralPath $packageLockPath) {
-            Remove-Item -LiteralPath $packageLockPath -Force
-            Write-Info "Removed: $packageLockPath"
-        }
+        Write-Warning '-ForceCleanNodeModules has no effect anymore because Pi packages are now installed via `pi install`, not via .pi-packages/node_modules.'
     }
 
     Write-Step 'Re-running installer in repair mode'

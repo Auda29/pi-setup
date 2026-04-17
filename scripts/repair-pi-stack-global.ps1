@@ -180,19 +180,8 @@ try {
     Write-Info "Install root: $ResolvedInstallRoot"
     Write-Info "Repair log: $GlobalRepairLogPath"
 
-    $packagesDir = Join-Path $ResolvedInstallRoot '.pi-packages'
     if ($ForceCleanNodeModules) {
-        Write-Step 'Cleaning broken global npm artifacts'
-        $nodeModulesPath = Join-Path $packagesDir 'node_modules'
-        $packageLockPath = Join-Path $packagesDir 'package-lock.json'
-        if (Test-Path -LiteralPath $nodeModulesPath) {
-            Remove-Item -LiteralPath $nodeModulesPath -Recurse -Force
-            Write-Info "Removed: $nodeModulesPath"
-        }
-        if (Test-Path -LiteralPath $packageLockPath) {
-            Remove-Item -LiteralPath $packageLockPath -Force
-            Write-Info "Removed: $packageLockPath"
-        }
+        Write-Warning '-ForceCleanNodeModules has no effect anymore because Pi packages are now installed via `pi install`, not via .pi-packages/node_modules.'
     }
 
     Write-Step 'Re-running global installer in repair mode'

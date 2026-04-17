@@ -80,6 +80,22 @@ function Get-NpmExecutable {
     return $null
 }
 
+function Get-PiExecutable {
+    $appData = [Environment]::GetFolderPath('ApplicationData')
+    $piCmd = Join-Path $appData 'npm\pi.cmd'
+    if (Test-Path -LiteralPath $piCmd) {
+        return $piCmd
+    }
+
+    $piCmdResolved = Get-CommandPathSafe -Name 'pi.cmd'
+    if ($piCmdResolved) { return $piCmdResolved }
+
+    $pi = Get-CommandPathSafe -Name 'pi'
+    if ($pi) { return $pi }
+
+    return $null
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -169,6 +185,17 @@ function Save-JsonObject {
     Set-Content -LiteralPath $Path -Value ($json + "`n") -Encoding UTF8
 }
 
+function Get-PiPackageSources {
+    return @(
+        'npm:mempalace-pi',
+        'npm:pi-lens',
+        'npm:pi-mcp-adapter',
+        'npm:pi-subagents',
+        'npm:pi-web-access',
+        'npm:pi-twincat-ads'
+    )
+}
+
 function Remove-PathSafe {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -226,6 +253,20 @@ function Remove-LegacyGlobalAgentsArtifacts {
     }
 }
 
+function Remove-PiPackageSafe {
+    param(
+        [Parameter(Mandatory = $true)][string]$PiExecutablePath,
+        [Parameter(Mandatory = $true)][string]$Source
+    )
+
+    try {
+        Invoke-External -FilePath $PiExecutablePath -Arguments @('uninstall', $Source)
+    }
+    catch {
+        Write-Warning "Could not remove Pi package '$Source': $($_.Exception.Message)"
+    }
+}
+
 Ensure-Directory -Path $GlobalUninstallLogDir
 
 try {
@@ -249,32 +290,20 @@ try {
     Write-Info "Global AGENTS.md: $GlobalAgentsPath"
     Write-Info "Log file: $GlobalUninstallLogPath"
 
-    $packagesDir = Join-Path $ResolvedInstallRoot '.pi-packages'
-    $globalPackagePaths = @(
-        (Join-Path $packagesDir 'node_modules\pi-subagents'),
-        (Join-Path $packagesDir 'node_modules\pi-mcp-adapter'),
-        (Join-Path $packagesDir 'node_modules\pi-lens'),
-        (Join-Path $packagesDir 'node_modules\pi-web-access'),
-        (Join-Path $packagesDir 'node_modules\mempalace-pi'),
-        (Join-Path $packagesDir 'node_modules\pi-twincat-ads')
-    )
-
-    if (-not $KeepGlobalSettings -and (Test-Path -LiteralPath $GlobalPiAgentSettingsPath)) {
-        Write-Step 'Cleaning global Pi settings'
-        $settings = Load-JsonObject -Path $GlobalPiAgentSettingsPath
-        $existingPackages = @($settings['packages'])
-        $remainingPackages = @()
-        foreach ($pkg in $existingPackages) {
-            if ($pkg -isnot [string]) { continue }
-            if ($globalPackagePaths -contains $pkg) { continue }
-            $remainingPackages += $pkg
+    if (-not $KeepGlobalSettings) {
+        $piExe = Get-PiExecutable
+        if ($piExe) {
+            Write-Step 'Removing global Pi packages'
+            foreach ($source in Get-PiPackageSources) {
+                Remove-PiPackageSafe -PiExecutablePath $piExe -Source $source
+            }
         }
-        $settings['packages'] = $remainingPackages
-        Save-JsonObject -Path $GlobalPiAgentSettingsPath -Data $settings
-        Write-Info 'Removed global package references from global Pi settings.'
+        else {
+            Write-Warning 'pi was not found. Global Pi packages could not be removed automatically.'
+        }
     }
-    elseif ($KeepGlobalSettings) {
-        Write-Info 'Keeping global Pi settings.'
+    else {
+        Write-Info 'Keeping global Pi settings and global Pi package entries.'
     }
 
     if (-not $KeepGlobalAgents) {

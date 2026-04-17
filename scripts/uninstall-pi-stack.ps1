@@ -13,7 +13,6 @@ Set-StrictMode -Version Latest
 $ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
 $ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
-$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
 $SettingsPath = Join-Path $PiDir 'settings.json'
 $StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $LogsDir = Join-Path $PiDir 'logs'
@@ -59,6 +58,22 @@ function Get-NpmExecutable {
     return $null
 }
 
+function Get-PiExecutable {
+    $appData = [Environment]::GetFolderPath('ApplicationData')
+    $piCmd = Join-Path $appData 'npm\pi.cmd'
+    if (Test-Path -LiteralPath $piCmd) {
+        return $piCmd
+    }
+
+    $piCmdResolved = Get-CommandPathSafe -Name 'pi.cmd'
+    if ($piCmdResolved) { return $piCmdResolved }
+
+    $pi = Get-CommandPathSafe -Name 'pi'
+    if ($pi) { return $pi }
+
+    return $null
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -94,6 +109,37 @@ function Remove-PathSafe {
     }
 }
 
+function Get-PiPackageSources {
+    return @(
+        'npm:mempalace-pi',
+        'npm:pi-lens',
+        'npm:pi-mcp-adapter',
+        'npm:pi-subagents',
+        'npm:pi-web-access',
+        'npm:pi-twincat-ads'
+    )
+}
+
+function Remove-PiPackageSafe {
+    param(
+        [Parameter(Mandatory = $true)][string]$PiExecutablePath,
+        [Parameter(Mandatory = $true)][string]$Source,
+        [switch]$Local
+    )
+
+    $args = @('uninstall', $Source)
+    if ($Local) {
+        $args += '--local'
+    }
+
+    try {
+        Invoke-External -FilePath $PiExecutablePath -Arguments $args -WorkingDirectory $ResolvedProjectRoot
+    }
+    catch {
+        Write-Warning "Could not remove Pi package '$Source': $($_.Exception.Message)"
+    }
+}
+
 Ensure-Directory -Path $PiDir
 Ensure-Directory -Path $LogsDir
 
@@ -109,8 +155,24 @@ try {
     Write-Info "Project root: $ResolvedProjectRoot"
     Write-Info "Uninstall log: $UninstallLogPath"
 
-    Write-Step 'Removing local Pi packages'
-    Remove-PathSafe -Path $PackagesDir
+    if (-not $KeepSettings) {
+        $piExe = Get-PiExecutable
+        if ($piExe) {
+            Write-Step 'Removing local Pi packages'
+            foreach ($source in Get-PiPackageSources) {
+                Remove-PiPackageSafe -PiExecutablePath $piExe -Source $source -Local
+            }
+        }
+        else {
+            Write-Warning 'pi was not found. Local Pi packages could not be removed from project settings automatically.'
+        }
+    }
+    else {
+        Write-Info 'Keeping .pi/settings.json, so local Pi package entries are left untouched.'
+    }
+
+    Write-Step 'Removing legacy local package directory'
+    Remove-PathSafe -Path (Join-Path $ResolvedProjectRoot '.pi-packages')
 
     Write-Step 'Removing project-local Pi files'
     if (-not $KeepSettings) {

@@ -24,9 +24,6 @@ $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
-$PackagesDir = Join-Path $ResolvedProjectRoot '.pi-packages'
-$PackagesManifestPath = Join-Path $PackagesDir 'package.json'
-$PackagesLockPath = Join-Path $PackagesDir 'package-lock.json'
 $SettingsPath = Join-Path $PiDir 'settings.json'
 $StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $SettingsBackupDir = Join-Path $PiDir 'backups'
@@ -282,82 +279,6 @@ function Install-MemPalacePythonBackend {
     Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
 }
 
-function Get-NpmViewText {
-    param(
-        [Parameter(Mandatory = $true)][string]$NpmExe,
-        [Parameter(Mandatory = $true)][string[]]$Arguments
-    )
-
-    $output = & $NpmExe @Arguments 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        return $null
-    }
-
-    $text = ($output | Out-String).Trim()
-    if ([string]::IsNullOrWhiteSpace($text)) {
-        return $null
-    }
-
-    return $text
-}
-
-function Get-NpmViewJson {
-    param(
-        [Parameter(Mandatory = $true)][string]$NpmExe,
-        [Parameter(Mandatory = $true)][string[]]$Arguments
-    )
-
-    $text = Get-NpmViewText -NpmExe $NpmExe -Arguments $Arguments
-    if ([string]::IsNullOrWhiteSpace($text)) {
-        return $null
-    }
-
-    try {
-        return ($text | ConvertFrom-Json)
-    }
-    catch {
-        return $null
-    }
-}
-
-function Test-NpmPackageVersionExists {
-    param(
-        [Parameter(Mandatory = $true)][string]$NpmExe,
-        [Parameter(Mandatory = $true)][string]$PackageName,
-        [Parameter(Mandatory = $true)][string]$Version
-    )
-
-    $result = & $NpmExe 'view' ("$PackageName@$Version") 'version' '--json' 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-
-    $text = ($result | Out-String).Trim().Trim('"')
-    return $text -eq $Version
-}
-
-function Get-GlobalNpmRoot {
-    param([Parameter(Mandatory = $true)][string]$NpmExe)
-
-    $text = Get-NpmViewText -NpmExe $NpmExe -Arguments @('root', '-g')
-    if ([string]::IsNullOrWhiteSpace($text)) {
-        return $null
-    }
-
-    return $text.Split([Environment]::NewLine)[0].Trim()
-}
-
-function Get-GlobalPiCodingAgentPath {
-    param([Parameter(Mandatory = $true)][string]$NpmExe)
-
-    $globalRoot = Get-GlobalNpmRoot -NpmExe $NpmExe
-    if ([string]::IsNullOrWhiteSpace($globalRoot)) {
-        return $null
-    }
-
-    return (Join-Path $globalRoot '@mariozechner\pi-coding-agent')
-}
-
 function Get-PiRelatedRunningProcesses {
     $results = @()
     try {
@@ -400,13 +321,11 @@ function Warn-AboutPiRelatedProcesses {
 
 function Remove-StaleGlobalPiCodingAgent {
     param([Parameter(Mandatory = $true)][string]$NpmExe)
-
-    $packagePath = Get-GlobalPiCodingAgentPath -NpmExe $NpmExe
     $appData = [Environment]::GetFolderPath('ApplicationData')
     $shimCandidates = @(
+        (Join-Path $appData 'npm\pi.ps1'),
         (Join-Path $appData 'npm\pi.cmd'),
-        (Join-Path $appData 'npm\pi'),
-        (Join-Path $appData 'npm\node_modules\@mariozechner\pi-coding-agent')
+        (Join-Path $appData 'npm\pi')
     )
 
     Warn-AboutPiRelatedProcesses
@@ -418,7 +337,7 @@ function Remove-StaleGlobalPiCodingAgent {
         Write-Warning "Global uninstall cleanup failed: $($_.Exception.Message)"
     }
 
-    foreach ($path in @($packagePath) + $shimCandidates) {
+    foreach ($path in $shimCandidates) {
         if (-not $path) { continue }
         if (-not (Test-Path -LiteralPath $path)) { continue }
         try {
@@ -435,49 +354,7 @@ function Install-GlobalPiCodingAgent {
     param([Parameter(Mandatory = $true)][string]$NpmExe)
 
     Write-Step 'Installing or updating pi-coding-agent globally'
-
-    if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $GlobalPiCodingAgentVersion)) {
-        throw "Fallback package version is not available: @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion"
-    }
-
-    $latestVersionText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'version', '--json')
-    $latestVersion = if ($latestVersionText) { $latestVersionText.Trim('"') } else { $null }
-
-    $latestPiAiRange = $null
-    if ($latestVersion) {
-        $latestDependenciesText = Get-NpmViewText -NpmExe $NpmExe -Arguments @('view', ("@mariozechner/pi-coding-agent@" + $latestVersion), 'dependencies', '--json')
-        if ($latestDependenciesText -match '"@mariozechner/pi-ai"\s*:\s*"([^"]+)"') {
-            $latestPiAiRange = $Matches[1]
-        }
-    }
-
-    $fallbackNeeded = $false
-    if ($latestPiAiRange -match '(\d+\.\d+\.\d+)') {
-        $latestPiAiVersion = $Matches[1]
-        if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-ai' -Version $latestPiAiVersion)) {
-            Write-Warning "Latest @mariozechner/pi-coding-agent@$latestVersion depends on @mariozechner/pi-ai $latestPiAiRange, but that version is not published. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
-            $fallbackNeeded = $true
-        }
-    }
-    elseif (-not $latestVersion) {
-        Write-Warning "Could not reliably determine the latest @mariozechner/pi-coding-agent version from npm. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion."
-        $fallbackNeeded = $true
-    }
-
-    if (-not $fallbackNeeded) {
-        try {
-            Write-Info 'Trying latest @mariozechner/pi-coding-agent once before fallback validation.'
-            Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', '@mariozechner/pi-coding-agent', '--no-fund', '--no-audit')
-            return
-        }
-        catch {
-            Write-Warning "Installing latest @mariozechner/pi-coding-agent failed. Falling back to @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion. Error: $($_.Exception.Message)"
-        }
-    }
-
-    Write-Info 'Preparing a clean fallback install state for the global pi-coding-agent package.'
     Remove-StaleGlobalPiCodingAgent -NpmExe $NpmExe
-
     Invoke-WithRetry -Description "npm install -g @mariozechner/pi-coding-agent@$GlobalPiCodingAgentVersion" -Action {
         Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@" + $GlobalPiCodingAgentVersion), '--no-fund', '--no-audit')
     } -MaxAttempts 3 -DelaySeconds 5
@@ -552,14 +429,17 @@ function Get-NpmExecutable {
 }
 
 function Get-PiExecutable {
-    $pi = Get-CommandPathSafe -Name 'pi'
-    if ($pi) { return $pi }
-
     $appData = [Environment]::GetFolderPath('ApplicationData')
     $piCmd = Join-Path $appData 'npm\pi.cmd'
     if (Test-Path -LiteralPath $piCmd) {
         return $piCmd
     }
+
+    $piCmdResolved = Get-CommandPathSafe -Name 'pi.cmd'
+    if ($piCmdResolved) { return $piCmdResolved }
+
+    $pi = Get-CommandPathSafe -Name 'pi'
+    if ($pi) { return $pi }
 
     return $null
 }
@@ -674,53 +554,6 @@ function Merge-UniqueStrings {
     return @($list)
 }
 
-function Get-DependencyMap {
-    $dependencies = [ordered]@{}
-    foreach ($name in $PackageNames) {
-        if ($UseLatestPackageVersions) {
-            $dependencies[$name] = 'latest'
-        }
-        else {
-            $dependencies[$name] = $PinnedVersions[$name]
-        }
-    }
-    return $dependencies
-}
-
-function Ensure-PackageManifest {
-    $manifest = [ordered]@{
-        name        = 'pi-setup-stack'
-        private     = $true
-        description = 'Local Pi stack for this project'
-        dependencies = (Get-DependencyMap)
-    }
-
-    if (-not (Test-Path -LiteralPath $PackagesManifestPath)) {
-        Write-Info "Creating $PackagesManifestPath"
-        Save-JsonObject -Path $PackagesManifestPath -Data $manifest
-        return
-    }
-
-    $existing = Load-JsonObject -Path $PackagesManifestPath
-    if (-not (Test-MapHasKey -Map $existing -Key 'name')) { $existing['name'] = $manifest['name'] }
-    $existing['private'] = $true
-    if (-not (Test-MapHasKey -Map $existing -Key 'description')) { $existing['description'] = $manifest['description'] }
-
-    $deps = [ordered]@{}
-    if ((Test-MapHasKey -Map $existing -Key 'dependencies') -and $existing['dependencies']) {
-        foreach ($entry in $existing['dependencies'].GetEnumerator()) {
-            $deps[$entry.Key] = $entry.Value
-        }
-    }
-
-    foreach ($entry in (Get-DependencyMap).GetEnumerator()) {
-        $deps[$entry.Key] = $entry.Value
-    }
-
-    $existing['dependencies'] = $deps
-    Save-JsonObject -Path $PackagesManifestPath -Data $existing
-}
-
 function Get-GitBashPath {
     $candidates = @(
         'C:\Program Files\Git\bin\bash.exe',
@@ -738,19 +571,13 @@ function Get-GitBashPath {
     return $null
 }
 
-function Test-PackageInstalled {
-    param([Parameter(Mandatory = $true)][string]$PackageName)
-
-    $packagePath = Join-Path $PackagesDir ("node_modules\\$PackageName")
-    return (Test-Path -LiteralPath $packagePath)
-}
-
-function Assert-PackageInstalled {
-    param([Parameter(Mandatory = $true)][string]$PackageName)
-
-    if (-not (Test-PackageInstalled -PackageName $PackageName)) {
-        throw "Package missing after npm install: $PackageName"
+function Get-PiPackageSources {
+    $sources = @()
+    foreach ($name in $PackageNames) {
+        $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
+        $sources += ("npm:{0}" -f $suffix)
     }
+    return $sources
 }
 
 function Test-PiAuthenticated {
@@ -769,7 +596,10 @@ function Test-PiAuthenticated {
 }
 
 function Start-PiLoginIfNeeded {
-    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+    param(
+        [Parameter(Mandatory = $true)][string]$PiExecutablePath,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
 
     if (Test-PiAuthenticated) {
         Write-Info 'Pi authentication already present. Skipping automatic /login.'
@@ -778,7 +608,15 @@ function Start-PiLoginIfNeeded {
 
     Write-Step 'Starting pi /login for first-time authentication'
     Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
-    & $PiExecutablePath '/login'
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+    Push-Location $WorkingDirectory
+    try {
+        & $PiExecutablePath '/login'
+    }
+    finally {
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "pi /login exited with code $LASTEXITCODE."
         return
@@ -793,21 +631,44 @@ function Start-PiLoginIfNeeded {
 }
 
 function Install-TwinCATAdsPackage {
-    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-        Write-Step 'Installing pi-twincat-ads from npm'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', 'pi-twincat-ads', '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+
+    $source = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'npm:pi-twincat-ads'
     }
     else {
-        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
-        Write-Step 'Installing pi-twincat-ads from local path'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
+        (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
     }
 
-    Assert-PackageInstalled -PackageName 'pi-twincat-ads'
+    $description = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'pi install npm:pi-twincat-ads -l'
+    }
+    else {
+        'pi install local pi-twincat-ads source -l'
+    }
+
+    $label = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'Installing pi-twincat-ads from npm'
+    }
+    else {
+        'Installing pi-twincat-ads from local path'
+    }
+
+    Write-Step $label
+    Invoke-WithRetry -Description $description -Action {
+        Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedProjectRoot -Arguments @('install', $source, '--local')
+    } -MaxAttempts 3 -DelaySeconds 5
+}
+
+function Install-PiPackages {
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+
+    Write-Step 'Installing local Pi packages via pi install'
+    foreach ($source in Get-PiPackageSources) {
+        Invoke-WithRetry -Description ("pi install {0} -l" -f $source) -Action {
+            Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedProjectRoot -Arguments @('install', $source, '--local')
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
 }
 
 Ensure-Directory -Path $PiDir
@@ -891,20 +752,10 @@ try {
 
     Write-Step 'Preparing project structure'
     Ensure-Directory -Path $ProjectScriptsDir
-    Ensure-Directory -Path $PackagesDir
-    Ensure-PackageManifest
 
-    Write-Step 'Installing local Pi packages via npm'
-    Invoke-WithRetry -Description 'npm install for .pi-packages' -Action {
-        Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', '--no-fund', '--no-audit')
-    } -MaxAttempts 3 -DelaySeconds 5
-
-    foreach ($packageName in $PackageNames) {
-        Assert-PackageInstalled -PackageName $packageName
-    }
-
+    Install-PiPackages -PiExecutablePath $piExe
     if ($IncludeTwinCATAds) {
-        Install-TwinCATAdsPackage
+        Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
     Write-Step 'Writing robust Pi project configuration'
@@ -914,20 +765,6 @@ try {
     $settings['npmCommand'] = @($npmExe)
     $settings['shellPath'] = $gitBashPath
     $settings['sessionDir'] = '.pi/sessions'
-
-    $packagePaths = @(
-        '../.pi-packages/node_modules/pi-subagents',
-        '../.pi-packages/node_modules/pi-mcp-adapter',
-        '../.pi-packages/node_modules/pi-lens',
-        '../.pi-packages/node_modules/pi-web-access',
-        '../.pi-packages/node_modules/mempalace-pi'
-    )
-
-    if ($IncludeTwinCATAds) {
-        $packagePaths += '../.pi-packages/node_modules/pi-twincat-ads'
-    }
-
-    $settings['packages'] = Merge-UniqueStrings -Existing $settings['packages'] -Incoming $packagePaths
     Save-JsonObject -Path $SettingsPath -Data $settings
 
     Write-Step 'Writing start script for mempalace/Python UTF-8'
@@ -963,12 +800,6 @@ exit `$LASTEXITCODE
 "@
     Set-Content -LiteralPath $StartScriptPath -Value $startScript -Encoding UTF8
 
-    Write-Step 'Validating local package paths'
-    foreach ($packagePath in $packagePaths) {
-        $resolvedPath = Resolve-Path -LiteralPath (Join-Path $PiDir $packagePath) -ErrorAction Stop
-        Write-Info "OK: $resolvedPath"
-    }
-
     Write-Step 'Writing AGENTS.md'
     $agentsMdPath = Join-Path $ResolvedProjectRoot 'AGENTS.md'
     $agentsMdContent = Get-AgentsMdContent -IncludeTwinCATAds:$IncludeTwinCATAds
@@ -987,10 +818,6 @@ exit `$LASTEXITCODE
     }
 
     Write-Host "`nImportant files:"
-    Write-Host "  - $PackagesManifestPath"
-    if (Test-Path -LiteralPath $PackagesLockPath) {
-        Write-Host "  - $PackagesLockPath"
-    }
     Write-Host "  - $SettingsPath"
     Write-Host "  - $StartScriptPath"
     Write-Host "  - $agentsMdPath"
@@ -1001,7 +828,7 @@ exit `$LASTEXITCODE
     Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1"
     Write-Host "  # target repo: $ResolvedProjectRoot"
 
-    Start-PiLoginIfNeeded -PiExecutablePath $piExe
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $ResolvedProjectRoot
 }
 catch {
     $ScriptExitCode = 1

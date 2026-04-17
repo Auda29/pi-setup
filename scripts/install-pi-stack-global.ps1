@@ -644,14 +644,17 @@ function Get-NpmExecutable {
 }
 
 function Get-PiExecutable {
-    $pi = Get-CommandPathSafe -Name 'pi'
-    if ($pi) { return $pi }
-
     $appData = [Environment]::GetFolderPath('ApplicationData')
     $piCmd = Join-Path $appData 'npm\pi.cmd'
     if (Test-Path -LiteralPath $piCmd) {
         return $piCmd
     }
+
+    $piCmdResolved = Get-CommandPathSafe -Name 'pi.cmd'
+    if ($piCmdResolved) { return $piCmdResolved }
+
+    $pi = Get-CommandPathSafe -Name 'pi'
+    if ($pi) { return $pi }
 
     return $null
 }
@@ -673,33 +676,13 @@ function Get-GitBashPath {
     return $null
 }
 
-function Get-DependencyMap {
-    $dependencies = [ordered]@{}
+function Get-PiPackageSources {
+    $sources = @()
     foreach ($name in $PackageNames) {
-        $dependencies[$name] = if ($UseLatestPackageVersions) { 'latest' } else { $PinnedVersions[$name] }
+        $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
+        $sources += ("npm:{0}" -f $suffix)
     }
-    return $dependencies
-}
-
-function Test-PackageInstalled {
-    param(
-        [Parameter(Mandatory = $true)][string]$PackagesDir,
-        [Parameter(Mandatory = $true)][string]$PackageName
-    )
-
-    $packagePath = Join-Path $PackagesDir (Join-Path 'node_modules' $PackageName)
-    return (Test-Path -LiteralPath $packagePath)
-}
-
-function Assert-PackageInstalled {
-    param(
-        [Parameter(Mandatory = $true)][string]$PackagesDir,
-        [Parameter(Mandatory = $true)][string]$PackageName
-    )
-
-    if (-not (Test-PackageInstalled -PackagesDir $PackagesDir -PackageName $PackageName)) {
-        throw "Package '$PackageName' was not installed under '$PackagesDir'."
-    }
+    return $sources
 }
 
 function Test-PiAuthenticated {
@@ -718,7 +701,10 @@ function Test-PiAuthenticated {
 }
 
 function Start-PiLoginIfNeeded {
-    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+    param(
+        [Parameter(Mandatory = $true)][string]$PiExecutablePath,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
 
     if (Test-PiAuthenticated) {
         Write-Info 'Pi authentication already present. Skipping automatic /login.'
@@ -727,7 +713,15 @@ function Start-PiLoginIfNeeded {
 
     Write-Step 'Starting pi /login for first-time authentication'
     Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
-    & $PiExecutablePath '/login'
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+    Push-Location $WorkingDirectory
+    try {
+        & $PiExecutablePath '/login'
+    }
+    finally {
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "pi /login exited with code $LASTEXITCODE."
         return
@@ -742,23 +736,44 @@ function Start-PiLoginIfNeeded {
 }
 
 function Install-TwinCATAdsPackage {
-    param([Parameter(Mandatory = $true)][string]$PackagesDir)
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
 
-    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-        Write-Step 'Installing pi-twincat-ads from npm'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', 'pi-twincat-ads', '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
+    $source = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'npm:pi-twincat-ads'
     }
     else {
-        $resolvedTwinCATAds = (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
-        Write-Step 'Installing pi-twincat-ads from local path'
-        Invoke-WithRetry -Description 'npm install pi-twincat-ads' -Action {
-            Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', $resolvedTwinCATAds, '--no-fund', '--no-audit')
-        } -MaxAttempts 3 -DelaySeconds 5
+        (Resolve-Path -LiteralPath $TwinCATAdsSource -ErrorAction Stop).Path
     }
 
-    Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName 'pi-twincat-ads'
+    $description = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'pi install npm:pi-twincat-ads'
+    }
+    else {
+        'pi install local pi-twincat-ads source'
+    }
+
+    $label = if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        'Installing pi-twincat-ads from npm'
+    }
+    else {
+        'Installing pi-twincat-ads from local path'
+    }
+
+    Write-Step $label
+    Invoke-WithRetry -Description $description -Action {
+        Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedInstallRoot -Arguments @('install', $source)
+    } -MaxAttempts 3 -DelaySeconds 5
+}
+
+function Install-PiPackages {
+    param([Parameter(Mandatory = $true)][string]$PiExecutablePath)
+
+    Write-Step 'Installing global Pi packages via pi install'
+    foreach ($source in Get-PiPackageSources) {
+        Invoke-WithRetry -Description ("pi install {0}" -f $source) -Action {
+            Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedInstallRoot -Arguments @('install', $source)
+        } -MaxAttempts 3 -DelaySeconds 5
+    }
 }
 
 if (-not $IsWindowsPlatform) {
@@ -771,18 +786,15 @@ try {
     $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
 
     $PiDir = Join-Path $ResolvedInstallRoot '.pi'
-    $PackagesDir = Join-Path $ResolvedInstallRoot '.pi-packages'
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
     $LogsDir = Join-Path $PiDir 'logs'
     $BackupsDir = Join-Path $PiDir 'backups'
     $SettingsPath = Join-Path $PiDir 'settings.json'
-    $PackagesManifestPath = Join-Path $PackagesDir 'package.json'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
     $ReadmePath = Join-Path $ResolvedInstallRoot 'README-global-pi-stack.txt'
     $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
     Ensure-Directory -Path $PiDir
-    Ensure-Directory -Path $PackagesDir
     Ensure-Directory -Path $ScriptsDir
     Ensure-Directory -Path $LogsDir
     Ensure-Directory -Path $BackupsDir
@@ -855,52 +867,16 @@ try {
     }
     Write-Host "pi:   $(& $piExe --version)"
 
-    Write-Step 'Creating local package manifest'
-    $manifest = [ordered]@{
-        name         = 'pi-setup-stack'
-        private      = $true
-        description  = 'Local Pi stack for this project'
-        dependencies = (Get-DependencyMap)
-    }
-    Save-JsonObject -Path $PackagesManifestPath -Data $manifest
-
-    Write-Step 'Installing local Pi packages via npm'
-    Invoke-WithRetry -Description 'npm install for .pi-packages' -Action {
-        Invoke-External -FilePath $npmExe -WorkingDirectory $PackagesDir -Arguments @('install', '--no-fund', '--no-audit')
-    } -MaxAttempts 3 -DelaySeconds 5
-
-    foreach ($packageName in $PackageNames) {
-        Assert-PackageInstalled -PackagesDir $PackagesDir -PackageName $packageName
-    }
+    Install-PiPackages -PiExecutablePath $piExe
 
     if ($IncludeTwinCATAds) {
-        Install-TwinCATAdsPackage -PackagesDir $PackagesDir
+        Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
     Write-Step 'Writing install-root and global Pi settings'
-    $packagePaths = @(
-        '../.pi-packages/node_modules/pi-subagents',
-        '../.pi-packages/node_modules/pi-mcp-adapter',
-        '../.pi-packages/node_modules/pi-lens',
-        '../.pi-packages/node_modules/pi-web-access',
-        '../.pi-packages/node_modules/mempalace-pi'
-    )
-    $globalPackagePaths = @(
-        (Join-Path $PackagesDir 'node_modules\pi-subagents'),
-        (Join-Path $PackagesDir 'node_modules\pi-mcp-adapter'),
-        (Join-Path $PackagesDir 'node_modules\pi-lens'),
-        (Join-Path $PackagesDir 'node_modules\pi-web-access'),
-        (Join-Path $PackagesDir 'node_modules\mempalace-pi')
-    )
-    if ($IncludeTwinCATAds) {
-        $packagePaths += '../.pi-packages/node_modules/pi-twincat-ads'
-        $globalPackagePaths += (Join-Path $PackagesDir 'node_modules\pi-twincat-ads')
-    }
-
     $installRootSettings = [ordered]@{
         npmCommand = @($npmExe)
         shellPath  = $gitBashPath
-        packages   = $packagePaths
         sessionDir = '.pi/sessions'
     }
     Save-JsonObject -Path $SettingsPath -Data $installRootSettings
@@ -917,7 +893,6 @@ try {
     if (-not (Test-MapHasKey -Map $globalSettings -Key 'sessionDir') -or [string]::IsNullOrWhiteSpace([string]$globalSettings['sessionDir'])) {
         $globalSettings['sessionDir'] = '.pi/sessions'
     }
-    $globalSettings['packages'] = Merge-UniqueStrings -Existing $globalSettings['packages'] -Incoming $globalPackagePaths
     Save-JsonObject -Path $GlobalPiAgentSettingsPath -Data $globalSettings
 
     Write-Step 'Writing start script'
@@ -967,7 +942,7 @@ What is included
 ----------------
 
 - global @mariozechner/pi-coding-agent
-- centrally installed Pi extensions in .pi-packages
+- globally installed Pi packages via `pi install`
 - global Pi settings in %USERPROFILE%\.pi\agent\settings.json
 - global agent guidance in %USERPROFILE%\.pi\agent\AGENTS.md
 - install-root Pi settings in .pi\settings.json
@@ -978,7 +953,6 @@ Important files
 ---------------
 
 - .pi\settings.json
-- .pi-packages\package.json
 - scripts\start-pi.ps1
 - README-global-pi-stack.txt
 - .pi\logs\
@@ -1025,16 +999,6 @@ Installed packages
     $readme = $readme.Replace('__INSTALL_ROOT__', $ResolvedInstallRoot)
     Set-Content -LiteralPath $ReadmePath -Value $readme -Encoding UTF8
 
-    Write-Step 'Validating package paths'
-    foreach ($packagePath in $packagePaths) {
-        $resolvedPath = Resolve-Path -LiteralPath (Join-Path $PiDir $packagePath) -ErrorAction Stop
-        Write-Info "Install-root OK: $resolvedPath"
-    }
-    foreach ($packagePath in $globalPackagePaths) {
-        $resolvedPath = Resolve-Path -LiteralPath $packagePath -ErrorAction Stop
-        Write-Info "Global OK: $resolvedPath"
-    }
-
     Write-Step 'Writing global AGENTS.md'
     $agentsMdContent = Get-AgentsMdContent -IncludeTwinCATAds:$IncludeTwinCATAds
     Set-GeneratedAgentsSection -Path $GlobalAgentsPath -GeneratedContent $agentsMdContent
@@ -1052,7 +1016,7 @@ Installed packages
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
     Write-Host 'Or start pi from another repo/editor; the global Pi settings were updated as well.'
 
-    Start-PiLoginIfNeeded -PiExecutablePath $piExe
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $ResolvedInstallRoot
 }
 catch {
     $ScriptExitCode = 1
