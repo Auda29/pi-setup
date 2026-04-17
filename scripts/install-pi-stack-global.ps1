@@ -187,15 +187,33 @@ function Migrate-LegacyGlobalInstallLayout {
     }
 }
 
-function Get-AgentsMdContent {
-    param([switch]$IncludeTwinCATAds)
+function Remove-UnwantedGlobalProjectArtifacts {
+    param([Parameter(Mandatory = $true)][string]$InstallRootPath)
 
-    $twincatSection = if ($IncludeTwinCATAds) {
-@"
+    $artifactPaths = @(
+        (Join-Path $InstallRootPath '.pi'),
+        (Join-Path $InstallRootPath '.pi-lens')
+    )
+
+    foreach ($artifactPath in $artifactPaths) {
+        if (-not (Test-Path -LiteralPath $artifactPath)) {
+            continue
+        }
+
+        try {
+            Remove-Item -LiteralPath $artifactPath -Recurse -Force -ErrorAction Stop
+            Write-Info "Removed stack-local project artifact: $artifactPath"
+        }
+        catch {
+            Write-Warning "Could not remove stack-local project artifact '$artifactPath': $($_.Exception.Message)"
+        }
+    }
+}
+
+function Get-AgentsMdContent {
+    $twincatSection = @"
 - `pi-twincat-ads`: Use for TwinCAT ADS communication and related automation tasks when the project requires it.
 "@
-    }
-    else { '' }
 
     return @"
 ## Pi setup tools available globally
@@ -721,6 +739,9 @@ function Get-PiPackageSources {
         $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
         $sources += ("npm:{0}" -f $suffix)
     }
+    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        $sources += 'npm:pi-twincat-ads'
+    }
     return $sources
 }
 
@@ -800,7 +821,7 @@ function Install-TwinCATAdsPackage {
 
     Write-Step $label
     Invoke-WithRetry -Description $description -Action {
-        Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedInstallRoot -Arguments @('install', $source)
+        Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $UserProfilePath -Arguments @('install', $source)
     } -MaxAttempts 3 -DelaySeconds 5
 }
 
@@ -810,7 +831,7 @@ function Install-PiPackages {
     Write-Step 'Installing global Pi packages via pi install'
     foreach ($source in Get-PiPackageSources) {
         Invoke-WithRetry -Description ("pi install {0}" -f $source) -Action {
-            Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $ResolvedInstallRoot -Arguments @('install', $source)
+            Invoke-External -FilePath $PiExecutablePath -WorkingDirectory $UserProfilePath -Arguments @('install', $source)
         } -MaxAttempts 3 -DelaySeconds 5
     }
 }
@@ -824,6 +845,7 @@ try {
     Ensure-Directory -Path $InstallRoot
     $ResolvedInstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
     Migrate-LegacyGlobalInstallLayout -InstallRootPath $ResolvedInstallRoot
+    Remove-UnwantedGlobalProjectArtifacts -InstallRootPath $ResolvedInstallRoot
 
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
     $LogsDir = Join-Path $ResolvedInstallRoot 'logs'
@@ -906,8 +928,7 @@ try {
     Write-Host "pi:   $(& $piExe --version)"
 
     Install-PiPackages -PiExecutablePath $piExe
-
-    if ($IncludeTwinCATAds) {
+    if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
@@ -943,10 +964,6 @@ param(
 `$ErrorActionPreference = 'Stop'
 `$env:PYTHONUTF8 = '1'
 `$env:PYTHONIOENCODING = 'utf-8'
-
-`$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
-`$ProjectRoot = Split-Path -Parent `$ScriptDir
-Set-Location `$ProjectRoot
 
 `$piCmd = Get-Command 'pi' -ErrorAction SilentlyContinue
 `$piCmdPath = if (`$piCmd) { `$piCmd.Source } else { `$null }
@@ -1038,7 +1055,7 @@ Installed packages
     Set-Content -LiteralPath $ReadmePath -Value $readme -Encoding UTF8
 
     Write-Step 'Writing global AGENTS.md'
-    $agentsMdContent = Get-AgentsMdContent -IncludeTwinCATAds:$IncludeTwinCATAds
+    $agentsMdContent = Get-AgentsMdContent
     Set-GeneratedAgentsSection -Path $GlobalAgentsPath -GeneratedContent $agentsMdContent
     Remove-LegacyGlobalAgentsPath
     Write-Info "Global AGENTS.md: $GlobalAgentsPath"
@@ -1054,7 +1071,7 @@ Installed packages
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
     Write-Host 'Or start pi from another repo/editor; the global Pi settings were updated as well.'
 
-    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $ResolvedInstallRoot
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $UserProfilePath
 }
 catch {
     $ScriptExitCode = 1

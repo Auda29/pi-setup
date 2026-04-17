@@ -39,7 +39,7 @@ Stack components:
 - `pi-lens`
 - `pi-web-access`
 - `mempalace-pi`
-- optionally `pi-twincat-ads`
+- `pi-twincat-ads`
 
 Goal: a setup that works as reproducibly as possible on both **fresh Windows systems** and machines with an **existing Pi installation**.
 
@@ -158,13 +158,12 @@ If you intentionally want to use `latest` instead:
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UseLatestPackageVersions
 ```
 
-### Include `pi-twincat-ads` from npm
+### Standard installation including `pi-twincat-ads`
 
-If you want the TwinCAT ADS package installed from npm:
+`pi-twincat-ads` is now part of the default stack and is installed from npm automatically:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
-  -IncludeTwinCATAds
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 ```
 
 ### Include local `pi-twincat-ads` source
@@ -173,7 +172,6 @@ If you want to test a local checkout instead of the published npm package:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 `
-  -IncludeTwinCATAds `
   -TwinCATAdsSource ..\pi-twincat-ads
 ```
 
@@ -210,7 +208,7 @@ The script uses retries for the usual flaky operations:
 - `winget install`
 - `npm install -g @mariozechner/pi-coding-agent`
 - `pi install npm:...`
-- optional `pi install` for `pi-twincat-ads`
+- `pi install` for `pi-twincat-ads`
 
 This makes it more likely to survive:
 
@@ -298,8 +296,7 @@ Supported extra options mostly match the normal installer:
 
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
 - `-UseLatestPackageVersions`
-- `-IncludeTwinCATAds`
-- `-IncludeTwinCATAds -TwinCATAdsSource <path>`
+- `-TwinCATAdsSource <path>`
 
 The target folder will contain, among other things:
 
@@ -329,11 +326,13 @@ Get-ChildItem C:\Tools\pi-stack\scripts
 Get-Content C:\Tools\pi-stack\README-global-pi-stack.txt
 ```
 
-### 3. Start Pi from the global install folder
+### 3. Start Pi with the global stack script
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
 ```
+
+The global start script does not switch into the stack folder. It keeps your current working directory so Pi does not treat the stack install directory as a normal project.
 
 ### 4. Optional: install with latest package versions
 
@@ -345,12 +344,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -UseLatestPackageVersions
 ```
 
-### 5. Optional: include `pi-twincat-ads` from npm
+### 5. Default: `pi-twincat-ads` is included
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
-  -InstallRoot C:\Tools\pi-stack `
-  -IncludeTwinCATAds
+  -InstallRoot C:\Tools\pi-stack
 ```
 
 ### 6. Optional: include local `pi-twincat-ads` source
@@ -358,7 +356,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -InstallRoot C:\Tools\pi-stack `
-  -IncludeTwinCATAds `
   -TwinCATAdsSource ..\pi-twincat-ads
 ```
 
@@ -388,18 +385,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCle
 
 `-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
-With `pi-twincat-ads` from npm:
+`pi-twincat-ads` from npm is included automatically:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
-  -IncludeTwinCATAds
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
 ```
 
 With local `pi-twincat-ads` source:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 `
-  -IncludeTwinCATAds `
   -TwinCATAdsSource ..\pi-twincat-ads
 ```
 
@@ -508,7 +503,7 @@ When reporting problems, it helps to include:
 - the full error message
 - the log file path
 - whether you used the project-local or global installer
-- whether `-RequirePython`, `-UseLatestPackageVersions`, or `-IncludeTwinCATAds` was used
+- whether `-RequirePython`, `-UseLatestPackageVersions`, or `-TwinCATAdsSource` was used
 
 ## Contributing
 

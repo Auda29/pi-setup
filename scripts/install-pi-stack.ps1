@@ -116,14 +116,9 @@ This file contains instructions for coding agents working in this repository.
 }
 
 function Get-AgentsMdContent {
-    param([switch]$IncludeTwinCATAds)
-
-    $twincatSection = if ($IncludeTwinCATAds) {
-@"
+    $twincatSection = @"
 - `pi-twincat-ads`: Use for TwinCAT ADS communication and related automation tasks when the project requires it.
 "@
-    }
-    else { '' }
 
     return @"
 ## Pi setup tools available in this workspace
@@ -755,7 +750,7 @@ try {
     Ensure-Directory -Path $ProjectScriptsDir
 
     Install-PiPackages -PiExecutablePath $piExe
-    if ($IncludeTwinCATAds) {
+    if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
@@ -803,7 +798,7 @@ exit `$LASTEXITCODE
 
     Write-Step 'Writing AGENTS.md'
     $agentsMdPath = Join-Path $ResolvedProjectRoot 'AGENTS.md'
-    $agentsMdContent = Get-AgentsMdContent -IncludeTwinCATAds:$IncludeTwinCATAds
+    $agentsMdContent = Get-AgentsMdContent
     Set-GeneratedAgentsSection -Path $agentsMdPath -GeneratedContent $agentsMdContent
     Write-Info "AGENTS.md: $agentsMdPath"
 
@@ -814,9 +809,7 @@ exit `$LASTEXITCODE
     foreach ($packageName in $PackageNames) {
         Write-Host "  - Local:  $packageName"
     }
-    if ($IncludeTwinCATAds) {
-        Write-Host '  - Local:  pi-twincat-ads'
-    }
+    Write-Host '  - Local:  pi-twincat-ads'
 
     Write-Host "`nImportant files:"
     Write-Host "  - $SettingsPath"
