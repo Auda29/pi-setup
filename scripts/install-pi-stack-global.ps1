@@ -288,6 +288,8 @@ function Invoke-External {
     )
 
     if ($WorkingDirectory) { Push-Location $WorkingDirectory }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
         Write-Info ("Run: " + $FilePath + ' ' + ($Arguments -join ' '))
         & $FilePath @Arguments
@@ -297,6 +299,7 @@ function Invoke-External {
         }
     }
     finally {
+        $ErrorActionPreference = $prevEap
         if ($WorkingDirectory) { Pop-Location }
     }
 }
