@@ -41,9 +41,7 @@ $PinnedVersions = [ordered]@{
     'pi-web-access'  = '0.10.6'
 }
 
-# Intentionally pinned: npm currently resolves the latest pi-coding-agent release
-# to @mariozechner/pi-ai@^0.67.4, but that package version is not published.
-$GlobalPiCodingAgentVersion = '0.67.3'
+$GlobalPiCodingAgentVersion = '0.67.68'
 
 $PackageNames = @($PinnedVersions.Keys)
 
@@ -458,7 +456,7 @@ function Get-PiRelatedRunningProcesses {
 
         foreach ($process in $processes) {
             $commandLine = [string]$process.CommandLine
-            if ($commandLine -match 'pi-coding-agent|\\npm\\pi\.cmd|\bpi\b|\bnpm\b') {
+            if ($commandLine -match 'pi-coding-agent|\\npm\\pi\.(cmd|ps1)\b') {
                 $results += [PSCustomObject]@{
                     ProcessId   = $process.ProcessId
                     Name        = $process.Name
