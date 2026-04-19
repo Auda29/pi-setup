@@ -151,6 +151,14 @@ The flag is still accepted for compatibility, but standard installation already 
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -RequirePython
 ```
 
+### Select Pi agent version
+
+The installers default to `@mariozechner/pi-coding-agent` `0.67.68`, but you can override that explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -AgentVersion 0.67.68
+```
+
 ### Latest package versions
 
 By default, this setup installs the latest published Pi package versions from npm.
@@ -343,6 +351,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -
 Supported extra options mostly match the normal installer:
 
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
+- `-AgentVersion <version>`
 - `-UseLatestPackageVersions` (compatibility flag; latest is already the default)
 - `-IncludeTwinCATAds`
 - `-TwinCATAdsSource <path>`
@@ -393,6 +402,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -UseLatestPackageVersions
 ```
 
+You can also override the global Pi agent version explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
+  -InstallRoot C:\Tools\pi-stack `
+  -AgentVersion 0.67.68
+```
+
 ### 5. Optional: include `pi-twincat-ads` from npm
 
 ```powershell
@@ -435,7 +452,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCle
 
 `-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
-Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, `-IncludeTwinCATAds`, and `-TwinCATAdsSource` to the install script. `-UseLatestPackageVersions` is currently a no-op compatibility flag.
+Repair forwards `-RequirePython`, `-AgentVersion`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, `-IncludeTwinCATAds`, and `-TwinCATAdsSource` to the install script. `-UseLatestPackageVersions` is currently a no-op compatibility flag.
 
 To include `pi-twincat-ads` from npm during repair:
 

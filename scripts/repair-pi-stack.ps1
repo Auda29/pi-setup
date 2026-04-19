@@ -3,6 +3,7 @@ param(
     [string]$ProjectRoot = (Get-Location).Path,
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
+    [string]$AgentVersion = '',
     [switch]$RequirePython,
     [switch]$UseLatestPackageVersions,
     [switch]$UpdatePrerequisites,
@@ -186,6 +187,9 @@ try {
     }
     if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         $arguments += @('-TwinCATAdsSource', $TwinCATAdsSource)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($AgentVersion)) {
+        $arguments += @('-AgentVersion', $AgentVersion)
     }
     if ($RequirePython) { $arguments += '-RequirePython' }
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }

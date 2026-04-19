@@ -3,6 +3,7 @@ param(
     [string]$InstallRoot = '',
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
+    [string]$AgentVersion = '0.67.68',
     [switch]$RequirePython,
     [switch]$UseLatestPackageVersions,
     [switch]$UpdatePrerequisites
@@ -34,8 +35,6 @@ $PiLensToolsDir = Join-Path $UserProfilePath '.pi-lens\tools'
 $GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
 $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
 $LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
-
-$GlobalPiCodingAgentVersion = '0.67.68'
 
 $PackageNames = @(
     'mempalace-pi',
@@ -211,9 +210,9 @@ function Remove-UnwantedGlobalProjectArtifacts {
 }
 
 function Get-AgentsMdContent {
-    $twincatSection = @"
+    $twincatSection = if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) { @"
 - `pi-twincat-ads`: Use for TwinCAT ADS communication and related automation tasks when the project requires it.
-"@
+"@ } else { "" }
 
     return @"
 ## Pi setup tools available globally
@@ -608,18 +607,21 @@ function Remove-StaleGlobalPiCodingAgent {
 function Install-GlobalPiCodingAgent {
     param([Parameter(Mandatory = $true)][string]$NpmExe)
 
-    $packageVersion = $GlobalPiCodingAgentVersion
-    if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $packageVersion)) {
-        throw "Pinned version @mariozechner/pi-coding-agent@$packageVersion is not available on npm."
+    $packageSpecifier = '@mariozechner/pi-coding-agent'
+    if (-not [string]::IsNullOrWhiteSpace($AgentVersion)) {
+        if (-not (Test-NpmPackageVersionExists -NpmExe $NpmExe -PackageName '@mariozechner/pi-coding-agent' -Version $AgentVersion)) {
+            throw "Requested version @mariozechner/pi-coding-agent@$AgentVersion is not available on npm."
+        }
+        $packageSpecifier = "@mariozechner/pi-coding-agent@$AgentVersion"
     }
 
     $versionJson = Get-NpmViewJson -NpmExe $NpmExe -Arguments @('view', '@mariozechner/pi-coding-agent', 'version', '--json')
     $latestInfo = if ($versionJson) { ($versionJson | Out-String).Trim() } else { 'unknown' }
-    Write-Info "Installing @mariozechner/pi-coding-agent@$packageVersion (npm latest currently: $latestInfo)"
+    Write-Info "Installing $packageSpecifier (npm latest currently: $latestInfo)"
 
     Invoke-WithRetry -Description 'npm uninstall/install -g @mariozechner/pi-coding-agent' -Action {
         Remove-StaleGlobalPiCodingAgent -NpmExe $NpmExe
-        Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', ("@mariozechner/pi-coding-agent@{0}" -f $packageVersion), '--no-fund', '--no-audit')
+        Invoke-External -FilePath $NpmExe -Arguments @('install', '-g', $packageSpecifier, '--no-fund', '--no-audit')
     } -MaxAttempts 3 -DelaySeconds 5
 }
 
@@ -839,10 +841,25 @@ function Get-NpmExecutable {
 }
 
 function Get-PiExecutable {
+    param([string]$NpmExe)
+
+    if ($NpmExe) {
+        $globalRoot = Get-GlobalNpmRoot -NpmExe $NpmExe
+        if (-not [string]::IsNullOrWhiteSpace($globalRoot)) {
+            $globalBin = Split-Path -Parent $globalRoot
+            if (-not [string]::IsNullOrWhiteSpace($globalBin)) {
+                $piCmd = Join-Path $globalBin 'pi.cmd'
+                if (Test-Path -LiteralPath $piCmd) {
+                    return $piCmd
+                }
+            }
+        }
+    }
+
     $appData = [Environment]::GetFolderPath('ApplicationData')
-    $piCmd = Join-Path $appData 'npm\pi.cmd'
-    if (Test-Path -LiteralPath $piCmd) {
-        return $piCmd
+    $fallbackPiCmd = Join-Path $appData 'npm\pi.cmd'
+    if (Test-Path -LiteralPath $fallbackPiCmd) {
+        return $fallbackPiCmd
     }
 
     $piCmdResolved = Get-CommandPathSafe -Name 'pi.cmd'
@@ -903,9 +920,6 @@ function Get-PiPackageSources {
     $sources = @()
     foreach ($name in $PackageNames) {
         $sources += ("npm:{0}" -f $name)
-    }
-    if ($IncludeTwinCATAds -and [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
-        $sources += 'npm:pi-twincat-ads'
     }
     return $sources
 }
@@ -1057,6 +1071,10 @@ try {
         throw 'Git Bash (bash.exe) was not found after installing Git for Windows.'
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource) -and -not $IncludeTwinCATAds) {
+        Write-Info 'TwinCATAdsSource was provided without IncludeTwinCATAds. Treating the source path as an implicit TwinCAT enable.'
+    }
+
     $pythonPath = Get-CommandPathSafe -Name 'py'
     if (-not $pythonPath) {
         $pythonPath = Get-CommandPathSafe -Name 'python'
@@ -1075,6 +1093,8 @@ try {
     if (-not $pythonPath) {
         throw 'Python is required for mempalace-pi but could not be installed or found.'
     }
+
+    Refresh-ProcessPath
 
     Write-Host "node: $(& $nodePath --version)"
     Write-Host "npm:  $(& $npmExe --version)"
@@ -1097,7 +1117,7 @@ try {
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
 
-    $piExe = Get-PiExecutable
+    $piExe = Get-PiExecutable -NpmExe $npmExe
     if (-not $piExe) {
         throw 'pi was not found after the global npm install.'
     }
