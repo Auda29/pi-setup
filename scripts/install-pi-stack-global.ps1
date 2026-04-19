@@ -66,6 +66,71 @@ function Ensure-Directory {
     }
 }
 
+function Get-PathEntries {
+    param([string]$PathValue)
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return @()
+    }
+
+    return @($PathValue.Split(';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Ensure-UserPathPrepend {
+    param([string[]]$Entries)
+
+    $normalizedEntries = @($Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($normalizedEntries.Count -eq 0) {
+        return
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $existingEntries = @(Get-PathEntries -PathValue $userPath)
+    $result = New-Object System.Collections.Generic.List[string]
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($entry in $normalizedEntries + $existingEntries) {
+        $trimmed = [string]$entry
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($seen.Add($trimmed)) {
+            [void]$result.Add($trimmed)
+        }
+    }
+
+    [Environment]::SetEnvironmentVariable('Path', ($result -join ';'), 'User')
+    Refresh-ProcessPath
+}
+
+function Get-CommandResolutionPaths {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    try {
+        $output = & where.exe $Name 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return @()
+        }
+
+        return @($output | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    catch {
+        return @()
+    }
+}
+
+function Warn-IfPython3StillHitsWindowsAlias {
+    $python3Paths = @(Get-CommandResolutionPaths -Name 'python3')
+    if ($python3Paths.Count -eq 0) {
+        Write-Warning "python3 is still not resolvable on PATH after shim setup."
+        return
+    }
+
+    $firstMatch = $python3Paths[0]
+    Write-Info "python3 resolves to: $firstMatch"
+    if ($firstMatch -match 'WindowsApps') {
+        Write-Warning "python3 still resolves to the Microsoft Store alias. Disable the Python App Execution Alias or move the npm/global shim path ahead of WindowsApps."
+    }
+}
+
 function Resolve-DefaultGlobalInstallRoot {
     param([string]$RequestedPath)
 
@@ -1130,6 +1195,8 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($GlobalNpmPythonShimPath)) {
         Write-Python3Shim -Path $GlobalNpmPythonShimPath
     }
+    Ensure-UserPathPrepend -Entries @($GlobalNpmBinDir, $GlobalPiAgentBinDir)
+    Warn-IfPython3StillHitsWindowsAlias
     Repair-PiLensTooling -NpmExe $npmExe
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
