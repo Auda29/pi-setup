@@ -4,7 +4,8 @@ param(
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
-    [switch]$UseLatestPackageVersions
+    [switch]$UseLatestPackageVersions,
+    [switch]$UpdatePrerequisites
 )
 
 $ErrorActionPreference = 'Stop'
@@ -539,6 +540,21 @@ function Install-GlobalPiCodingAgent {
     } -MaxAttempts 3 -DelaySeconds 5
 }
 
+function Invoke-WingetProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$WingetPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [int[]]$AcceptableExitCodes = @()
+    )
+
+    Write-Info ("Run: " + $WingetPath + ' ' + ($Arguments -join ' '))
+    $process = Start-Process -FilePath $WingetPath -ArgumentList $Arguments -Wait -NoNewWindow -PassThru
+    $exitCode = $process.ExitCode
+    if ($exitCode -ne 0 -and $AcceptableExitCodes -notcontains $exitCode) {
+        throw "Command failed ($exitCode): $WingetPath $($Arguments -join ' ')"
+    }
+}
+
 function Invoke-WingetInstall {
     param(
         [Parameter(Mandatory = $true)][string]$PackageId,
@@ -552,7 +568,7 @@ function Invoke-WingetInstall {
 
     Write-Step "Installing $DisplayName via winget"
     Invoke-WithRetry -Description "winget install $PackageId" -Action {
-        Invoke-External -FilePath $winget -Arguments @(
+        Invoke-WingetProcess -WingetPath $winget -Arguments @(
             'install', '--id', $PackageId, '--exact', '--silent',
             '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
         )
@@ -578,7 +594,7 @@ function Invoke-WingetUpgrade {
     Write-Step "Checking for updates for $DisplayName via winget"
     try {
         Invoke-WithRetry -Description "winget upgrade $PackageId" -Action {
-            Invoke-External -FilePath $winget -Arguments @(
+            Invoke-WingetProcess -WingetPath $winget -Arguments @(
                 'upgrade', '--id', $PackageId, '--exact', '--silent',
                 '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity',
                 '--include-unknown'
@@ -600,7 +616,7 @@ function Ensure-Command {
     )
 
     if (Test-CommandExists -Name $Name) {
-        if ($WingetPackageId) {
+        if ($WingetPackageId -and $UpdatePrerequisites) {
             Invoke-WingetUpgrade -PackageId $WingetPackageId -DisplayName $DisplayName
         }
         return (Get-CommandPathSafe -Name $Name)

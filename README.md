@@ -48,7 +48,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 `scripts/install-pi-stack.ps1` does the following in the folder/repo you run it from:
 
 1. checks whether it is running on Windows
-2. installs missing prerequisites via `winget` when possible and updates already installed prerequisites to the newest available `winget` version
+2. installs missing prerequisites via `winget` when possible (existing prerequisites are only upgraded when you pass `-UpdatePrerequisites`)
    - Node.js LTS
    - Git for Windows
    - Python 3 for `mempalace-pi`
@@ -152,16 +152,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -Require
 
 By default, this setup uses pinned Pi package versions for better reproducibility.
 
-At the same time, the install scripts now try to keep everything they install up to date on each run:
+On each run the install scripts also keep things they install up to date:
 
-- existing `winget`-managed prerequisites such as Node.js, Git, and Python are checked with `winget upgrade`
 - the Python `mempalace` backend is refreshed via `pip install --upgrade`
 - Pi packages are reinstalled through `pi install` according to the selected version policy
+- prerequisites managed by `winget` (Node.js, Git, Python) are only checked for upgrades when you pass `-UpdatePrerequisites`
 
 If you intentionally want to use `latest` instead:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UseLatestPackageVersions
+```
+
+### Upgrade existing prerequisites
+
+By default the installer leaves already installed prerequisites alone. Pass `-UpdatePrerequisites` to run `winget upgrade` for Node.js, Git, and Python on an existing setup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UpdatePrerequisites
 ```
 
 ### Standard installation including `pi-twincat-ads`
@@ -226,11 +234,11 @@ This makes it more likely to survive:
 
 Running `install-pi-stack.ps1`, `install-pi-stack-global.ps1`, or the corresponding repair scripts refreshes the installed stack instead of only skipping existing tools.
 
-- Existing prerequisites managed through `winget` are upgraded when an update is available.
 - `mempalace` is always updated with `pip install --upgrade mempalace`.
 - `@mariozechner/pi-coding-agent` is reinstalled to the currently configured supported version.
 - Pi packages are reinstalled through `pi install`.
 - With `-UseLatestPackageVersions`, the Pi packages are resolved to the latest npm versions instead of the pinned defaults.
+- Prerequisites managed through `winget` (Node.js, Git, Python) are **not** upgraded by default. Pass `-UpdatePrerequisites` to opt in to `winget upgrade` for those tools.
 
 ## Important files
 
@@ -313,6 +321,7 @@ Supported extra options mostly match the normal installer:
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
 - `-UseLatestPackageVersions`
 - `-TwinCATAdsSource <path>`
+- `-UpdatePrerequisites` (opt in to `winget upgrade` for existing Node.js, Git, and Python)
 
 The target folder will contain, among other things:
 
