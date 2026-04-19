@@ -394,7 +394,44 @@ exit /b 9009
     Set-Content -LiteralPath $Path -Value ($shimContent.Trim() + "`r`n") -Encoding ASCII
 }
 
+function Install-PiLensCliTools {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
+    Ensure-Directory -Path $PiLensToolsDir
+
+    $packageJsonPath = Join-Path $PiLensToolsDir 'package.json'
+    if (-not (Test-Path -LiteralPath $packageJsonPath)) {
+        $packageJson = [ordered]@{
+            name    = 'pi-lens-tools'
+            private = $true
+        }
+        Save-JsonObject -Path $packageJsonPath -Data $packageJson
+    }
+
+    $tools = @(
+        @{ Package = '@ast-grep/cli'; Binary = 'sg.cmd'; VerifyArgs = @('--version') },
+        @{ Package = 'knip'; Binary = 'knip.cmd'; VerifyArgs = @('--version') },
+        @{ Package = 'jscpd'; Binary = 'jscpd.cmd'; VerifyArgs = @('--version') },
+        @{ Package = 'madge'; Binary = 'madge.cmd'; VerifyArgs = @('--version') }
+    )
+
+    foreach ($tool in $tools) {
+        Invoke-WithRetry -Description ("npm install {0} for pi-lens" -f $tool.Package) -Action {
+            Invoke-External -FilePath $NpmExe -WorkingDirectory $PiLensToolsDir -Arguments @('install', '--no-audit', '--no-fund', $tool.Package)
+        } -MaxAttempts 2 -DelaySeconds 5
+
+        $binaryPath = Join-Path $PiLensToolsDir ("node_modules\.bin\" + $tool.Binary)
+        if (-not (Test-Path -LiteralPath $binaryPath)) {
+            throw "pi-lens tool install did not produce expected binary: $binaryPath"
+        }
+
+        Invoke-External -FilePath $binaryPath -WorkingDirectory $PiLensToolsDir -Arguments $tool.VerifyArgs
+    }
+}
+
 function Repair-PiLensTooling {
+    param([Parameter(Mandatory = $true)][string]$NpmExe)
+
     Write-Step 'Preparing pi-lens tooling on Windows'
 
     Ensure-Command -Name 'rg' -WingetPackageId 'BurntSushi.ripgrep.MSVC' -DisplayName 'ripgrep (rg)' -Optional | Out-Null
@@ -408,6 +445,13 @@ function Repair-PiLensTooling {
         catch {
             Write-Warning "Could not reset pi-lens tools cache '$PiLensToolsDir': $($_.Exception.Message)"
         }
+    }
+
+    try {
+        Install-PiLensCliTools -NpmExe $NpmExe
+    }
+    catch {
+        Write-Warning "Could not fully preinstall pi-lens CLI tools: $($_.Exception.Message)"
     }
 }
 
@@ -1044,7 +1088,7 @@ try {
     Install-MemPalacePythonBackend -PythonPath $pythonPath
     Write-Step 'Writing python3 compatibility shim for Windows'
     Write-Python3Shim -Path $PythonShimPath
-    Repair-PiLensTooling
+    Repair-PiLensTooling -NpmExe $npmExe
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath

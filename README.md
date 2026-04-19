@@ -129,7 +129,7 @@ This sets the following for the session:
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
-For `pi-lens`, the installers also try to provision `rg` and `fd` via `winget` and clear stale state under `%USERPROFILE%\.pi-lens\tools` so broken auto-install remnants do not survive into the next Pi start.
+For `pi-lens`, the installers also try to provision `rg` and `fd` via `winget`, clear stale state under `%USERPROFILE%\.pi-lens\tools`, and preinstall the common `pi-lens` CLI helpers (`@ast-grep/cli`, `knip`, `jscpd`, `madge`) sequentially so broken auto-install remnants do not survive into the next Pi start.
 
 If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts print the next step and try to open a new PowerShell window with Pi. In that Pi prompt, run `/login`.
 
@@ -319,6 +319,7 @@ The installers and repair scripts now handle the common Windows failure mode aut
 - trying to install `rg` via `winget install BurntSushi.ripgrep.MSVC`
 - trying to install `fd` via `winget install sharkdp.fd`
 - deleting stale cache state under `%USERPROFILE%\.pi-lens\tools`
+- reinstalling `@ast-grep/cli`, `knip`, `jscpd`, and `madge` sequentially in `%USERPROFILE%\.pi-lens\tools`
 
 If `winget` is not available, the scripts warn and continue, but you should install `rg` and `fd` manually.
 
