@@ -409,6 +409,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCle
 
 `-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
+Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, and `-TwinCATAdsSource` to the install script.
+
 `pi-twincat-ads` from npm is included automatically:
 
 ```powershell

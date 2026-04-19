@@ -5,6 +5,7 @@ param(
     [string]$TwinCATAdsSource,
     [switch]$RequirePython,
     [switch]$UseLatestPackageVersions,
+    [switch]$UpdatePrerequisites,
     [switch]$ForceCleanNodeModules
 )
 
@@ -168,6 +169,7 @@ try {
     }
     if ($RequirePython) { $arguments += '-RequirePython' }
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }
+    if ($UpdatePrerequisites) { $arguments += '-UpdatePrerequisites' }
 
     Invoke-WithRetry -Description 'Re-running install script' -Action {
         Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ResolvedProjectRoot
