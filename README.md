@@ -128,7 +128,7 @@ This sets the following for the session:
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
-If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts print the next step. Start Pi and run `/login` inside the Pi prompt.
+If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts print the next step and try to open a new PowerShell window with Pi. In that Pi prompt, run `/login`.
 
 ## Installer options
 

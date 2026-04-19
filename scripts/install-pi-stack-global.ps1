@@ -770,10 +770,21 @@ function Get-PiExecutable {
 }
 
 function Get-GitBashPath {
-    $candidates = @(
-        'C:\Program Files\Git\bin\bash.exe',
-        'C:\Program Files (x86)\Git\bin\bash.exe'
-    )
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    foreach ($baseDir in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ([string]::IsNullOrWhiteSpace($baseDir)) { continue }
+        $candidates.Add((Join-Path $baseDir 'Git\bin\bash.exe'))
+    }
+
+    $gitPath = Get-CommandPathSafe -Name 'git'
+    if ($gitPath) {
+        $gitCmdDir = Split-Path -Parent $gitPath
+        $gitRootDir = Split-Path -Parent $gitCmdDir
+        if (-not [string]::IsNullOrWhiteSpace($gitRootDir)) {
+            $candidates.Add((Join-Path $gitRootDir 'bin\bash.exe'))
+        }
+    }
 
     foreach ($candidate in $candidates) {
         if (Test-Path -LiteralPath $candidate) {
@@ -784,6 +795,23 @@ function Get-GitBashPath {
     $bash = Get-CommandPathSafe -Name 'bash'
     if ($bash) { return $bash }
     return $null
+}
+
+function Get-PowerShellExecutablePath {
+    $currentShellPath = Get-CommandPathSafe -Name 'powershell'
+    if ($currentShellPath) {
+        return $currentShellPath
+    }
+
+    $systemRoot = [Environment]::GetEnvironmentVariable('SystemRoot')
+    if (-not [string]::IsNullOrWhiteSpace($systemRoot)) {
+        $fallback = Join-Path $systemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (Test-Path -LiteralPath $fallback) {
+            return $fallback
+        }
+    }
+
+    return 'powershell.exe'
 }
 
 function Get-PiPackageSources {
@@ -816,7 +844,8 @@ function Test-PiAuthenticated {
 function Start-PiLoginIfNeeded {
     param(
         [Parameter(Mandatory = $true)][string]$PiExecutablePath,
-        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$StartScriptPath
     )
 
     if (Test-PiAuthenticated) {
@@ -830,8 +859,24 @@ function Start-PiLoginIfNeeded {
     Write-Host 'Start Pi and then run /login inside the Pi prompt.' -ForegroundColor Yellow
     Write-Host ''
     Write-Host 'Recommended command:' -ForegroundColor Yellow
-    Write-Host ("  powershell -ExecutionPolicy Bypass -File `"{0}`"" -f (Join-Path $WorkingDirectory 'scripts\start-pi.ps1')) -ForegroundColor Yellow
+    Write-Host ("  powershell -ExecutionPolicy Bypass -File `"{0}`"" -f $StartScriptPath) -ForegroundColor Yellow
     Write-Host 'Then type: /login' -ForegroundColor Yellow
+
+    if (Test-Path -LiteralPath $StartScriptPath) {
+        Write-Info 'Opening a new PowerShell window for Pi login.'
+        try {
+            Start-Process -FilePath (Get-PowerShellExecutablePath) -ArgumentList @(
+                '-NoExit',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-File',
+                $StartScriptPath
+            ) | Out-Null
+        }
+        catch {
+            Write-Warning "Could not open a new PowerShell window automatically: $($_.Exception.Message)"
+        }
+    }
 }
 
 function Install-TwinCATAdsPackage {
@@ -1105,7 +1150,7 @@ Installed packages
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$StartScriptPath`""
     Write-Host 'Or start pi from another repo/editor; the global Pi settings were updated as well.'
 
-    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $UserProfilePath
+    Start-PiLoginIfNeeded -PiExecutablePath $piExe -WorkingDirectory $UserProfilePath -StartScriptPath $StartScriptPath
 }
 catch {
     $ScriptExitCode = 1

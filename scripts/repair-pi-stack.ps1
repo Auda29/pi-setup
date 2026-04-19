@@ -49,6 +49,23 @@ function Get-CommandPathSafe {
     return $null
 }
 
+function Get-PowerShellExecutablePath {
+    $currentShellPath = Get-CommandPathSafe -Name 'powershell'
+    if ($currentShellPath) {
+        return $currentShellPath
+    }
+
+    $systemRoot = [Environment]::GetEnvironmentVariable('SystemRoot')
+    if (-not [string]::IsNullOrWhiteSpace($systemRoot)) {
+        $fallback = Join-Path $systemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (Test-Path -LiteralPath $fallback) {
+            return $fallback
+        }
+    }
+
+    return 'powershell.exe'
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -175,7 +192,7 @@ try {
     if ($UpdatePrerequisites) { $arguments += '-UpdatePrerequisites' }
 
     Invoke-WithRetry -Description 'Re-running install script' -Action {
-        Invoke-External -FilePath 'powershell.exe' -Arguments $arguments -WorkingDirectory $ResolvedProjectRoot
+        Invoke-External -FilePath (Get-PowerShellExecutablePath) -Arguments $arguments -WorkingDirectory $ResolvedProjectRoot
     } -MaxAttempts 2 -DelaySeconds 5
 
     Test-MemPalacePythonBackend
