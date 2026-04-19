@@ -1236,6 +1236,17 @@ param(
 )
 
 `$ErrorActionPreference = 'Stop'
+try {
+    [Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+}
+catch {
+}
+try {
+    `$null = & chcp.com 65001
+}
+catch {
+}
 `$env:PYTHONUTF8 = '1'
 `$env:PYTHONIOENCODING = 'utf-8'
 `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path

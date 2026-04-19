@@ -126,6 +126,8 @@ This sets the following for the session:
 
 - `PYTHONUTF8=1`
 - `PYTHONIOENCODING=utf-8`
+- PowerShell console input/output encoding to UTF-8
+- `chcp 65001` when available
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
