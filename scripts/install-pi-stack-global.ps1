@@ -824,28 +824,14 @@ function Start-PiLoginIfNeeded {
         return
     }
 
-    Write-Step 'Starting pi login for first-time authentication'
-    Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
-    $env:PYTHONUTF8 = '1'
-    $env:PYTHONIOENCODING = 'utf-8'
-    Push-Location $WorkingDirectory
-    try {
-        & $PiExecutablePath '--login'
-    }
-    finally {
-        Pop-Location
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "pi --login exited with code $LASTEXITCODE."
-        return
-    }
-
-    if (Test-PiAuthenticated) {
-        Write-Info 'Pi authentication completed successfully.'
-    }
-    else {
-        Write-Warning 'pi --login finished, but no auth.json was detected afterwards.'
-    }
+    Write-Step 'Pi authentication required'
+    Write-Warning 'No existing Pi authentication was found.'
+    Write-Host 'Pi does not provide a non-interactive login flag for this flow.' -ForegroundColor Yellow
+    Write-Host 'Start Pi and then run /login inside the Pi prompt.' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'Recommended command:' -ForegroundColor Yellow
+    Write-Host ("  powershell -ExecutionPolicy Bypass -File `"{0}`"" -f (Join-Path $WorkingDirectory 'scripts\start-pi.ps1')) -ForegroundColor Yellow
+    Write-Host 'Then type: /login' -ForegroundColor Yellow
 }
 
 function Install-TwinCATAdsPackage {
