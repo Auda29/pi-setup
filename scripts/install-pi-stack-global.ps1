@@ -284,7 +284,8 @@ function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
         [string[]]$Arguments = @(),
-        [string]$WorkingDirectory
+        [string]$WorkingDirectory,
+        [int[]]$AcceptableExitCodes = @()
     )
 
     if ($WorkingDirectory) { Push-Location $WorkingDirectory }
@@ -294,7 +295,7 @@ function Invoke-External {
         Write-Info ("Run: " + $FilePath + ' ' + ($Arguments -join ' '))
         & $FilePath @Arguments
         $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 0) {
+        if ($exitCode -ne 0 -and $AcceptableExitCodes -notcontains $exitCode) {
             throw "Command failed ($exitCode): $FilePath $($Arguments -join ' ')"
         }
     }
@@ -571,6 +572,9 @@ function Invoke-WingetUpgrade {
         return
     }
 
+    # 0x8A15002B = WINGET_NO_APPLICABLE_UPGRADE (already up to date)
+    $noUpgradeExitCode = -1978335189
+
     Write-Step "Checking for updates for $DisplayName via winget"
     try {
         Invoke-WithRetry -Description "winget upgrade $PackageId" -Action {
@@ -578,7 +582,7 @@ function Invoke-WingetUpgrade {
                 'upgrade', '--id', $PackageId, '--exact', '--silent',
                 '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity',
                 '--include-unknown'
-            )
+            ) -AcceptableExitCodes @($noUpgradeExitCode)
         } -MaxAttempts 2 -DelaySeconds 5
         Refresh-ProcessPath
     }
