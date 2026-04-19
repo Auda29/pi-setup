@@ -646,23 +646,23 @@ function Start-PiLoginIfNeeded {
     )
 
     if (Test-PiAuthenticated) {
-        Write-Info 'Pi authentication already present. Skipping automatic /login.'
+        Write-Info 'Pi authentication already present. Skipping automatic login.'
         return
     }
 
-    Write-Step 'Starting pi /login for first-time authentication'
+    Write-Step 'Starting pi login for first-time authentication'
     Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
     Push-Location $WorkingDirectory
     try {
-        & $PiExecutablePath '/login'
+        & $PiExecutablePath '--login'
     }
     finally {
         Pop-Location
     }
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "pi /login exited with code $LASTEXITCODE."
+        Write-Warning "pi --login exited with code $LASTEXITCODE."
         return
     }
 
@@ -670,7 +670,7 @@ function Start-PiLoginIfNeeded {
         Write-Info 'Pi authentication completed successfully.'
     }
     else {
-        Write-Warning 'pi /login finished, but no auth.json was detected afterwards.'
+        Write-Warning 'pi --login finished, but no auth.json was detected afterwards.'
     }
 }
 
@@ -798,7 +798,7 @@ try {
     Ensure-Directory -Path $ProjectScriptsDir
 
     Install-PiPackages -PiExecutablePath $piExe
-    if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+    if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
@@ -857,7 +857,9 @@ exit `$LASTEXITCODE
     foreach ($packageName in $PackageNames) {
         Write-Host "  - Local:  $packageName"
     }
-    Write-Host '  - Local:  pi-twincat-ads'
+    if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        Write-Host '  - Local:  pi-twincat-ads'
+    }
 
     Write-Host "`nImportant files:"
     Write-Host "  - $SettingsPath"

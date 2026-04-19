@@ -39,7 +39,7 @@ Stack components:
 - `pi-lens`
 - `pi-web-access`
 - `mempalace-pi`
-- `pi-twincat-ads`
+- `pi-twincat-ads` (optional)
 
 Goal: a setup that works as reproducibly as possible on both **fresh Windows systems** and machines with an **existing Pi installation**.
 
@@ -63,7 +63,7 @@ Goal: a setup that works as reproducibly as possible on both **fresh Windows sys
 8. creates backups of existing settings
 9. creates a Windows start script: `scripts/start-pi.ps1`
 10. writes an install log to `.pi/logs/`
-11. starts `pi /login` automatically if `%USERPROFILE%\.pi\agent\auth.json` is not present yet
+11. starts `pi --login` automatically if `%USERPROFILE%\.pi\agent\auth.json` is not present yet
 
 ## Why this approach?
 
@@ -128,7 +128,7 @@ This sets the following for the session:
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
-If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts start `pi /login` automatically at the end so authentication can happen immediately in the same terminal.
+If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts start `pi --login` automatically at the end so authentication can happen immediately in the same terminal.
 
 ## Installer options
 
@@ -172,12 +172,20 @@ By default the installer leaves already installed prerequisites alone. Pass `-Up
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UpdatePrerequisites
 ```
 
-### Standard installation including `pi-twincat-ads`
+### Standard installation without `pi-twincat-ads`
 
-`pi-twincat-ads` is now part of the default stack and is installed from npm automatically:
+`pi-twincat-ads` is optional and is not installed unless you opt in:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
+```
+
+### Include `pi-twincat-ads`
+
+To install the standard stack and add `pi-twincat-ads` from npm:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -IncludeTwinCATAds
 ```
 
 ### Include local `pi-twincat-ads` source
@@ -222,7 +230,7 @@ The script uses retries for the usual flaky operations:
 - `winget install`
 - `npm install -g @mariozechner/pi-coding-agent`
 - `pi install npm:...`
-- `pi install` for `pi-twincat-ads`
+- `pi install` for `pi-twincat-ads` when enabled
 
 This makes it more likely to survive:
 
@@ -320,6 +328,7 @@ Supported extra options mostly match the normal installer:
 
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
 - `-UseLatestPackageVersions`
+- `-IncludeTwinCATAds`
 - `-TwinCATAdsSource <path>`
 - `-UpdatePrerequisites` (opt in to `winget upgrade` for existing Node.js, Git, and Python)
 
@@ -368,11 +377,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -UseLatestPackageVersions
 ```
 
-### 5. Default: `pi-twincat-ads` is included
+### 5. Optional: include `pi-twincat-ads` from npm
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
-  -InstallRoot C:\Tools\pi-stack
+  -InstallRoot C:\Tools\pi-stack `
+  -IncludeTwinCATAds
 ```
 
 ### 6. Optional: include local `pi-twincat-ads` source
@@ -409,12 +419,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCle
 
 `-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
-Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, and `-TwinCATAdsSource` to the install script.
+Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, `-IncludeTwinCATAds`, and `-TwinCATAdsSource` to the install script.
 
-`pi-twincat-ads` from npm is included automatically:
+To include `pi-twincat-ads` from npm during repair:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -IncludeTwinCATAds
 ```
 
 With local `pi-twincat-ads` source:
@@ -529,7 +539,7 @@ When reporting problems, it helps to include:
 - the full error message
 - the log file path
 - whether you used the project-local or global installer
-- whether `-RequirePython`, `-UseLatestPackageVersions`, or `-TwinCATAdsSource` was used
+- whether `-RequirePython`, `-UseLatestPackageVersions`, `-IncludeTwinCATAds`, or `-TwinCATAdsSource` was used
 
 ## Contributing
 

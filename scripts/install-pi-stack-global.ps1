@@ -792,7 +792,7 @@ function Get-PiPackageSources {
         $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
         $sources += ("npm:{0}" -f $suffix)
     }
-    if ([string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+    if ($IncludeTwinCATAds -and [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         $sources += 'npm:pi-twincat-ads'
     }
     return $sources
@@ -820,23 +820,23 @@ function Start-PiLoginIfNeeded {
     )
 
     if (Test-PiAuthenticated) {
-        Write-Info 'Pi authentication already present. Skipping automatic /login.'
+        Write-Info 'Pi authentication already present. Skipping automatic login.'
         return
     }
 
-    Write-Step 'Starting pi /login for first-time authentication'
+    Write-Step 'Starting pi login for first-time authentication'
     Write-Host 'No existing Pi authentication was found. The login flow will start now in this terminal.' -ForegroundColor Yellow
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
     Push-Location $WorkingDirectory
     try {
-        & $PiExecutablePath '/login'
+        & $PiExecutablePath '--login'
     }
     finally {
         Pop-Location
     }
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "pi /login exited with code $LASTEXITCODE."
+        Write-Warning "pi --login exited with code $LASTEXITCODE."
         return
     }
 
@@ -844,7 +844,7 @@ function Start-PiLoginIfNeeded {
         Write-Info 'Pi authentication completed successfully.'
     }
     else {
-        Write-Warning 'pi /login finished, but no auth.json was detected afterwards.'
+        Write-Warning 'pi --login finished, but no auth.json was detected afterwards.'
     }
 }
 
@@ -980,7 +980,7 @@ try {
     Write-Host "pi:   $(& $piExe --version)"
 
     Install-PiPackages -PiExecutablePath $piExe
-    if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+    if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         Install-TwinCATAdsPackage -PiExecutablePath $piExe
     }
 
@@ -1094,6 +1094,11 @@ Installed packages
 - pi-web-access
 - mempalace-pi
 '@
+    if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
+        $readme += @'
+- pi-twincat-ads
+'@
+    }
     $readme = $readme.Replace('__INSTALL_ROOT__', $ResolvedInstallRoot)
     Set-Content -LiteralPath $ReadmePath -Value $readme -Encoding UTF8
 

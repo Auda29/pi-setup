@@ -192,6 +192,9 @@ try {
     }
 
     $arguments = @('-ExecutionPolicy', 'Bypass', '-File', $installScript, '-InstallRoot', $ResolvedInstallRoot)
+    if ($IncludeTwinCATAds) {
+        $arguments += '-IncludeTwinCATAds'
+    }
     if (-not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         $arguments += @('-TwinCATAdsSource', $TwinCATAdsSource)
     }
