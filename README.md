@@ -55,15 +55,16 @@ Goal: a setup that works robustly on both **fresh Windows systems** and machines
 3. installs or updates `@mariozechner/pi-coding-agent` globally
 4. installs the Pi packages with the official `pi install` workflow
 5. installs the Python package `mempalace` so `mempalace-pi` works on Windows out of the box
-6. writes a robust `.pi/settings.json`
+6. preps `pi-lens` for Windows by attempting to install `rg`/`fd` and clearing stale `~\.pi-lens\tools` cache state
+7. writes a robust `.pi/settings.json`
    - `npmCommand`
    - `shellPath`
    - `sessionDir`
-7. creates or updates an `AGENTS.md` with tool guidance for coding agents
-8. creates backups of existing settings
-9. creates a Windows start script: `scripts/start-pi.ps1`
-10. writes an install log to `.pi/logs/`
-11. checks whether `%USERPROFILE%\.pi\agent\auth.json` exists and, if not, tells you to start Pi and run `/login`
+8. creates or updates an `AGENTS.md` with tool guidance for coding agents
+9. creates backups of existing settings
+10. creates a Windows start script: `scripts/start-pi.ps1`
+11. writes an install log to `.pi/logs/`
+12. checks whether `%USERPROFILE%\.pi\agent\auth.json` exists and, if not, tells you to start Pi and run `/login`
 
 ## Why this approach?
 
@@ -127,6 +128,8 @@ This sets the following for the session:
 - `PYTHONIOENCODING=utf-8`
 
 That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
+
+For `pi-lens`, the installers also try to provision `rg` and `fd` via `winget` and clear stale state under `%USERPROFILE%\.pi-lens\tools` so broken auto-install remnants do not survive into the next Pi start.
 
 If `%USERPROFILE%\.pi\agent\auth.json` is missing, the install scripts print the next step and try to open a new PowerShell window with Pi. In that Pi prompt, run `/login`.
 
@@ -308,6 +311,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
 The start script now prepends a local Windows `python3` shim from `.pi\bin\python3.cmd`, which forwards to `py -3` first and then `python`. That covers packages such as `mempalace-pi` that may still try to launch `python3` explicitly on Windows.
+
+### 5. `pi-lens` auto-install failures (`rg`, `fd`, `ast-grep`, `knip`, `jscpd`, `madge`)
+
+The installers and repair scripts now handle the common Windows failure mode automatically by:
+
+- trying to install `rg` via `winget install BurntSushi.ripgrep.MSVC`
+- trying to install `fd` via `winget install sharkdp.fd`
+- deleting stale cache state under `%USERPROFILE%\.pi-lens\tools`
+
+If `winget` is not available, the scripts warn and continue, but you should install `rg` and `fd` manually.
 
 ## Pi package wiring
 

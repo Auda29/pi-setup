@@ -29,6 +29,7 @@ $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
+$PiLensToolsDir = Join-Path $UserProfilePath '.pi-lens\tools'
 $GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
 $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
 $LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
@@ -391,6 +392,23 @@ exit /b 9009
 
     Ensure-Directory -Path (Split-Path -Parent $Path)
     Set-Content -LiteralPath $Path -Value ($shimContent.Trim() + "`r`n") -Encoding ASCII
+}
+
+function Repair-PiLensTooling {
+    Write-Step 'Preparing pi-lens tooling on Windows'
+
+    Ensure-Command -Name 'rg' -WingetPackageId 'BurntSushi.ripgrep.MSVC' -DisplayName 'ripgrep (rg)' -Optional | Out-Null
+    Ensure-Command -Name 'fd' -WingetPackageId 'sharkdp.fd' -DisplayName 'fd' -Optional | Out-Null
+
+    if (Test-Path -LiteralPath $PiLensToolsDir) {
+        try {
+            Remove-Item -LiteralPath $PiLensToolsDir -Recurse -Force -ErrorAction Stop
+            Write-Info "Removed stale pi-lens tools cache: $PiLensToolsDir"
+        }
+        catch {
+            Write-Warning "Could not reset pi-lens tools cache '$PiLensToolsDir': $($_.Exception.Message)"
+        }
+    }
 }
 
 function Get-NpmViewText {
@@ -1026,6 +1044,7 @@ try {
     Install-MemPalacePythonBackend -PythonPath $pythonPath
     Write-Step 'Writing python3 compatibility shim for Windows'
     Write-Python3Shim -Path $PythonShimPath
+    Repair-PiLensTooling
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
