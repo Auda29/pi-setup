@@ -9,6 +9,10 @@ $env:PYTHONIOENCODING = 'utf-8'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
+$ShimDir = Join-Path $ProjectRoot '.pi\bin'
+if (Test-Path -LiteralPath $ShimDir) {
+    $env:Path = $ShimDir + ';' + $env:Path
+}
 Set-Location $ProjectRoot
 
 $piCmd = Get-Command 'pi' -ErrorAction SilentlyContinue

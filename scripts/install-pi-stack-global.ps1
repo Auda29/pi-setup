@@ -33,17 +33,15 @@ $GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
 $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
 $LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
 
-$PinnedVersions = [ordered]@{
-    'mempalace-pi'   = '0.2.0'
-    'pi-lens'        = '3.8.26'
-    'pi-mcp-adapter' = '2.4.0'
-    'pi-subagents'   = '0.14.1'
-    'pi-web-access'  = '0.10.6'
-}
-
 $GlobalPiCodingAgentVersion = '0.67.68'
 
-$PackageNames = @($PinnedVersions.Keys)
+$PackageNames = @(
+    'mempalace-pi',
+    'pi-lens',
+    'pi-mcp-adapter',
+    'pi-subagents',
+    'pi-web-access'
+)
 
 function Write-Step {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -369,6 +367,30 @@ function Install-MemPalacePythonBackend {
 
     Write-Step 'Validating MemPalace Python backend'
     Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
+}
+
+function Write-Python3Shim {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $shimContent = @"
+@echo off
+setlocal
+where py >nul 2>nul
+if not errorlevel 1 (
+    py -3 %*
+    exit /b %ERRORLEVEL%
+)
+where python >nul 2>nul
+if not errorlevel 1 (
+    python %*
+    exit /b %ERRORLEVEL%
+)
+echo python3 shim could not find py or python on PATH. 1>&2
+exit /b 9009
+"@
+
+    Ensure-Directory -Path (Split-Path -Parent $Path)
+    Set-Content -LiteralPath $Path -Value ($shimContent.Trim() + "`r`n") -Encoding ASCII
 }
 
 function Get-NpmViewText {
@@ -817,8 +839,7 @@ function Get-PowerShellExecutablePath {
 function Get-PiPackageSources {
     $sources = @()
     foreach ($name in $PackageNames) {
-        $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
-        $sources += ("npm:{0}" -f $suffix)
+        $sources += ("npm:{0}" -f $name)
     }
     if ($IncludeTwinCATAds -and [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         $sources += 'npm:pi-twincat-ads'
@@ -932,6 +953,8 @@ try {
     Remove-UnwantedGlobalProjectArtifacts -InstallRootPath $ResolvedInstallRoot
 
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
+    $ShimDir = Join-Path $ResolvedInstallRoot 'bin'
+    $PythonShimPath = Join-Path $ShimDir 'python3.cmd'
     $LogsDir = Join-Path $ResolvedInstallRoot 'logs'
     $BackupsDir = Join-Path $ResolvedInstallRoot 'backups'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
@@ -939,6 +962,7 @@ try {
     $InstallLogPath = Join-Path $LogsDir ("global-install-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
     Ensure-Directory -Path $ScriptsDir
+    Ensure-Directory -Path $ShimDir
     Ensure-Directory -Path $LogsDir
     Ensure-Directory -Path $BackupsDir
     Ensure-Directory -Path $GlobalPiAgentDir
@@ -1000,6 +1024,8 @@ try {
     }
 
     Install-MemPalacePythonBackend -PythonPath $pythonPath
+    Write-Step 'Writing python3 compatibility shim for Windows'
+    Write-Python3Shim -Path $PythonShimPath
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
@@ -1040,6 +1066,12 @@ param(
 `$ErrorActionPreference = 'Stop'
 `$env:PYTHONUTF8 = '1'
 `$env:PYTHONIOENCODING = 'utf-8'
+`$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$InstallRoot = Split-Path -Parent `$ScriptDir
+`$ShimDir = Join-Path `$InstallRoot 'bin'
+if (Test-Path -LiteralPath `$ShimDir) {
+    `$env:Path = `$ShimDir + ';' + `$env:Path
+}
 
 `$piCmd = Get-Command 'pi' -ErrorAction SilentlyContinue
 `$piCmdPath = if (`$piCmd) { `$piCmd.Source } else { `$null }

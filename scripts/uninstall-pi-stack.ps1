@@ -13,6 +13,7 @@ Set-StrictMode -Version Latest
 $ResolvedProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot -ErrorAction Stop).Path
 $ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
+$ShimDir = Join-Path $PiDir 'bin'
 $SettingsPath = Join-Path $PiDir 'settings.json'
 $StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $LogsDir = Join-Path $PiDir 'logs'
@@ -175,6 +176,8 @@ try {
     Remove-PathSafe -Path (Join-Path $ResolvedProjectRoot '.pi-packages')
 
     Write-Step 'Removing project-local Pi files'
+    Remove-PathSafe -Path $ShimDir
+
     if (-not $KeepSettings) {
         Remove-PathSafe -Path $SettingsPath
     } else {

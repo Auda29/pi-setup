@@ -26,6 +26,8 @@ $GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $ProjectScriptsDir = Join-Path $ResolvedProjectRoot 'scripts'
 $PiDir = Join-Path $ResolvedProjectRoot '.pi'
 $SettingsPath = Join-Path $PiDir 'settings.json'
+$ShimDir = Join-Path $PiDir 'bin'
+$PythonShimPath = Join-Path $ShimDir 'python3.cmd'
 $StartScriptPath = Join-Path $ProjectScriptsDir 'start-pi.ps1'
 $SettingsBackupDir = Join-Path $PiDir 'backups'
 $LogsDir = Join-Path $PiDir 'logs'
@@ -33,17 +35,15 @@ $InstallLogPath = Join-Path $LogsDir ("install-" + (Get-Date -Format 'yyyyMMdd-H
 $TranscriptStarted = $false
 $ScriptExitCode = 0
 
-$PinnedVersions = [ordered]@{
-    'mempalace-pi'   = '0.2.0'
-    'pi-lens'        = '3.8.26'
-    'pi-mcp-adapter' = '2.4.0'
-    'pi-subagents'   = '0.14.1'
-    'pi-web-access'  = '0.10.6'
-}
-
 $GlobalPiCodingAgentVersion = '0.67.68'
 
-$PackageNames = @($PinnedVersions.Keys)
+$PackageNames = @(
+    'mempalace-pi',
+    'pi-lens',
+    'pi-mcp-adapter',
+    'pi-subagents',
+    'pi-web-access'
+)
 
 function Write-Step {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -271,6 +271,30 @@ function Install-MemPalacePythonBackend {
 
     Write-Step 'Validating MemPalace Python backend'
     Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
+}
+
+function Write-Python3Shim {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $shimContent = @"
+@echo off
+setlocal
+where py >nul 2>nul
+if not errorlevel 1 (
+    py -3 %*
+    exit /b %ERRORLEVEL%
+)
+where python >nul 2>nul
+if not errorlevel 1 (
+    python %*
+    exit /b %ERRORLEVEL%
+)
+echo python3 shim could not find py or python on PATH. 1>&2
+exit /b 9009
+"@
+
+    Ensure-Directory -Path (Split-Path -Parent $Path)
+    Set-Content -LiteralPath $Path -Value ($shimContent.Trim() + "`r`n") -Encoding ASCII
 }
 
 function Get-PiRelatedRunningProcesses {
@@ -646,8 +670,7 @@ function Get-PowerShellExecutablePath {
 function Get-PiPackageSources {
     $sources = @()
     foreach ($name in $PackageNames) {
-        $suffix = if ($UseLatestPackageVersions) { $name } else { ("{0}@{1}" -f $name, $PinnedVersions[$name]) }
-        $sources += ("npm:{0}" -f $suffix)
+        $sources += ("npm:{0}" -f $name)
     }
     return $sources
 }
@@ -747,6 +770,7 @@ function Install-PiPackages {
 }
 
 Ensure-Directory -Path $PiDir
+Ensure-Directory -Path $ShimDir
 Ensure-Directory -Path $LogsDir
 
 try {
@@ -814,6 +838,8 @@ try {
     }
 
     Install-MemPalacePythonBackend -PythonPath $pythonPath
+    Write-Step 'Writing python3 compatibility shim for Windows'
+    Write-Python3Shim -Path $PythonShimPath
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
     Refresh-ProcessPath
@@ -855,6 +881,10 @@ param(
 
 `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$ProjectRoot = Split-Path -Parent `$ScriptDir
+`$ShimDir = Join-Path `$ProjectRoot '.pi\bin'
+if (Test-Path -LiteralPath `$ShimDir) {
+    `$env:Path = `$ShimDir + ';' + `$env:Path
+}
 Set-Location `$ProjectRoot
 
 `$piCmd = Get-Command 'pi' -ErrorAction SilentlyContinue

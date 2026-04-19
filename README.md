@@ -41,7 +41,7 @@ Stack components:
 - `mempalace-pi`
 - `pi-twincat-ads` (optional)
 
-Goal: a setup that works as reproducibly as possible on both **fresh Windows systems** and machines with an **existing Pi installation**.
+Goal: a setup that works robustly on both **fresh Windows systems** and machines with an **existing Pi installation**, while keeping Pi extensions current.
 
 ## What the setup does
 
@@ -148,17 +148,17 @@ The flag is still accepted for compatibility, but standard installation already 
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -RequirePython
 ```
 
-### Use latest package versions instead of pinned versions
+### Latest package versions
 
-By default, this setup uses pinned Pi package versions for better reproducibility.
+By default, this setup installs the latest published Pi package versions from npm.
 
 On each run the install scripts also keep things they install up to date:
 
 - the Python `mempalace` backend is refreshed via `pip install --upgrade`
-- Pi packages are reinstalled through `pi install` according to the selected version policy
+- Pi packages are reinstalled through `pi install` against the current npm latest release
 - prerequisites managed by `winget` (Node.js, Git, Python) are only checked for upgrades when you pass `-UpdatePrerequisites`
 
-If you intentionally want to use `latest` instead:
+The legacy flag is still accepted for compatibility, but it no longer changes package resolution:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -UseLatestPackageVersions
@@ -245,7 +245,7 @@ Running `install-pi-stack.ps1`, `install-pi-stack-global.ps1`, or the correspond
 - `mempalace` is always updated with `pip install --upgrade mempalace`.
 - `@mariozechner/pi-coding-agent` is reinstalled to the currently configured supported version.
 - Pi packages are reinstalled through `pi install`.
-- With `-UseLatestPackageVersions`, the Pi packages are resolved to the latest npm versions instead of the pinned defaults.
+- Pi packages are always resolved to the latest npm versions.
 - Prerequisites managed through `winget` (Node.js, Git, Python) are **not** upgraded by default. Pass `-UpdatePrerequisites` to opt in to `winget upgrade` for those tools.
 
 ## Important files
@@ -264,13 +264,13 @@ Running `install-pi-stack.ps1`, `install-pi-stack-global.ps1`, or the correspond
 
 ## Installed packages
 
-Pinned by default:
+Installed from npm latest by default:
 
-- `pi-subagents` `0.14.1`
-- `pi-mcp-adapter` `2.4.0`
-- `pi-lens` `3.8.26`
-- `pi-web-access` `0.10.6`
-- `mempalace-pi` `0.2.0`
+- `pi-subagents`
+- `pi-mcp-adapter`
+- `pi-lens`
+- `pi-web-access`
+- `mempalace-pi`
 
 ## What happens if Pi is already installed?
 
@@ -307,6 +307,8 @@ Always start Pi via:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
+The start script now prepends a local Windows `python3` shim from `.pi\bin\python3.cmd`, which forwards to `py -3` first and then `python`. That covers packages such as `mempalace-pi` that may still try to launch `python3` explicitly on Windows.
+
 ## Pi package wiring
 
 This repo now installs Pi packages through the official CLI, for example `pi install npm:pi-subagents --local`, instead of writing `node_modules` paths into `.pi/settings.json` manually.
@@ -327,7 +329,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 -
 Supported extra options mostly match the normal installer:
 
 - `-RequirePython` (kept for compatibility; Python + `mempalace` are installed by default now)
-- `-UseLatestPackageVersions`
+- `-UseLatestPackageVersions` (compatibility flag; latest is already the default)
 - `-IncludeTwinCATAds`
 - `-TwinCATAdsSource <path>`
 - `-UpdatePrerequisites` (opt in to `winget upgrade` for existing Node.js, Git, and Python)
@@ -367,9 +369,9 @@ powershell -ExecutionPolicy Bypass -File C:\Tools\pi-stack\scripts\start-pi.ps1
 
 The global start script does not switch into the stack folder. It keeps your current working directory so Pi does not treat the stack install directory as a normal project.
 
-### 4. Optional: install with latest package versions
+### 4. Optional: legacy compatibility flag
 
-`-RequirePython` is no longer necessary for normal installs, because Python + the `mempalace` backend are prepared automatically.
+`-RequirePython` is no longer necessary for normal installs, because Python + the `mempalace` backend are prepared automatically. `-UseLatestPackageVersions` is accepted for older automation, but current installers already use latest package versions by default.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
@@ -419,7 +421,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\repair-pi-stack.ps1 -ForceCle
 
 `-ForceCleanNodeModules` no longer removes anything because the setup does not use `.pi-packages/node_modules` anymore.
 
-Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, `-IncludeTwinCATAds`, and `-TwinCATAdsSource` to the install script.
+Repair forwards `-RequirePython`, `-UseLatestPackageVersions`, `-UpdatePrerequisites`, `-IncludeTwinCATAds`, and `-TwinCATAdsSource` to the install script. `-UseLatestPackageVersions` is currently a no-op compatibility flag.
 
 To include `pi-twincat-ads` from npm during repair:
 
