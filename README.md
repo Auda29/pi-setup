@@ -310,7 +310,7 @@ Always start Pi via:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-The start script now prepends a local Windows `python3` shim from `.pi\bin\python3.cmd`, which forwards to `py -3` first and then `python`. That covers packages such as `mempalace-pi` that may still try to launch `python3` explicitly on Windows.
+The setup now writes Windows `python3` shims in both `.pi\bin\python3.cmd` and `%USERPROFILE%\.pi\agent\bin\python3.cmd`, both forwarding to `py -3` first and then `python`. That covers packages such as `mempalace-pi` that may still try to launch `python3` explicitly on Windows, even when Pi is started via `pi` directly or through an IDE launcher.
 
 ### 5. `pi-lens` auto-install failures (`rg`, `fd`, `ast-grep`, `knip`, `jscpd`, `madge`)
 

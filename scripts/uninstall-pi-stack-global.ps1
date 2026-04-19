@@ -17,6 +17,7 @@ $UserProfilePath = [Environment]::GetFolderPath('UserProfile')
 $PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
 $LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
+$GlobalPiAgentBinDir = Join-Path $GlobalPiAgentDir 'bin'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalAgentsPath = Join-Path $GlobalPiAgentDir 'AGENTS.md'
 $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
@@ -315,6 +316,8 @@ try {
     else {
         Write-Info 'Keeping global AGENTS.md.'
     }
+
+    Remove-PathSafe -Path (Join-Path $GlobalPiAgentBinDir 'python3.cmd')
 
     if (-not $KeepInstallRoot) {
         Write-Step 'Removing global install root'

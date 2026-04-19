@@ -26,6 +26,7 @@ $UserProfilePath = [Environment]::GetFolderPath('UserProfile')
 $PreferredGlobalInstallRoot = Join-Path $UserProfilePath '.pi\stack'
 $LegacyGlobalInstallRoot = Join-Path $UserProfilePath '.pi-stack'
 $GlobalPiAgentDir = Join-Path $UserProfilePath '.pi\agent'
+$GlobalPiAgentBinDir = Join-Path $GlobalPiAgentDir 'bin'
 $GlobalPiAgentSettingsPath = Join-Path $GlobalPiAgentDir 'settings.json'
 $GlobalPiAgentAuthPath = Join-Path $GlobalPiAgentDir 'auth.json'
 $GlobalPiAgentBackupsDir = Join-Path $GlobalPiAgentDir 'backups'
@@ -1017,6 +1018,7 @@ try {
     $ScriptsDir = Join-Path $ResolvedInstallRoot 'scripts'
     $ShimDir = Join-Path $ResolvedInstallRoot 'bin'
     $PythonShimPath = Join-Path $ShimDir 'python3.cmd'
+    $GlobalPythonShimPath = Join-Path $GlobalPiAgentBinDir 'python3.cmd'
     $LogsDir = Join-Path $ResolvedInstallRoot 'logs'
     $BackupsDir = Join-Path $ResolvedInstallRoot 'backups'
     $StartScriptPath = Join-Path $ScriptsDir 'start-pi.ps1'
@@ -1028,6 +1030,7 @@ try {
     Ensure-Directory -Path $LogsDir
     Ensure-Directory -Path $BackupsDir
     Ensure-Directory -Path $GlobalPiAgentDir
+    Ensure-Directory -Path $GlobalPiAgentBinDir
     Ensure-Directory -Path $GlobalPiAgentBackupsDir
 
     try {
@@ -1088,6 +1091,7 @@ try {
     Install-MemPalacePythonBackend -PythonPath $pythonPath
     Write-Step 'Writing python3 compatibility shim for Windows'
     Write-Python3Shim -Path $PythonShimPath
+    Write-Python3Shim -Path $GlobalPythonShimPath
     Repair-PiLensTooling -NpmExe $npmExe
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
@@ -1132,6 +1136,10 @@ param(
 `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$InstallRoot = Split-Path -Parent `$ScriptDir
 `$ShimDir = Join-Path `$InstallRoot 'bin'
+`$GlobalAgentBinDir = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi\agent\bin'
+if (Test-Path -LiteralPath `$GlobalAgentBinDir) {
+    `$env:Path = `$GlobalAgentBinDir + ';' + `$env:Path
+}
 if (Test-Path -LiteralPath `$ShimDir) {
     `$env:Path = `$ShimDir + ';' + `$env:Path
 }
