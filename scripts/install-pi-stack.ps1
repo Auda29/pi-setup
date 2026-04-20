@@ -69,6 +69,41 @@ function Refresh-ProcessPath {
     }
 }
 
+function Get-PathEntries {
+    param([string]$PathValue)
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return @()
+    }
+
+    return @($PathValue.Split(';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Ensure-UserPathPrepend {
+    param([string[]]$Entries)
+
+    $normalizedEntries = @($Entries | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($normalizedEntries.Count -eq 0) {
+        return
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $existingEntries = @(Get-PathEntries -PathValue $userPath)
+    $result = New-Object System.Collections.Generic.List[string]
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($entry in $normalizedEntries + $existingEntries) {
+        $trimmed = [string]$entry
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($seen.Add($trimmed)) {
+            [void]$result.Add($trimmed)
+        }
+    }
+
+    [Environment]::SetEnvironmentVariable('Path', ($result -join ';'), 'User')
+    Refresh-ProcessPath
+}
+
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -271,6 +306,57 @@ function Install-MemPalacePythonBackend {
 
     Write-Step 'Validating MemPalace Python backend'
     Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
+}
+
+function Get-PythonScriptsDirectories {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $dirs = New-Object System.Collections.Generic.List[string]
+    $probes = @(
+        @{ Label = 'system'; Code = 'import sysconfig; print(sysconfig.get_path("scripts"))' },
+        @{ Label = 'user'; Code = 'import site, os; print(os.path.join(site.USER_BASE, "Scripts"))' }
+    )
+
+    foreach ($probe in $probes) {
+        try {
+            $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+            $allArguments = @($pythonSpec['BaseArguments']) + @('-c', $probe.Code)
+            $output = (& $pythonSpec['FilePath'] @allArguments 2>$null | Out-String).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($output) -and (Test-Path -LiteralPath $output)) {
+                [void]$dirs.Add($output)
+                Write-Info ("Python {0} Scripts dir: {1}" -f $probe.Label, $output)
+            }
+        }
+        catch {
+            Write-Warning ("Could not resolve Python {0} Scripts dir: {1}" -f $probe.Label, $_.Exception.Message)
+        }
+    }
+
+    return @($dirs | Select-Object -Unique)
+}
+
+function Ensure-MempalaceExecutableOnPath {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $scriptsDirs = @(Get-PythonScriptsDirectories -PythonPath $PythonPath)
+    if ($scriptsDirs.Count -eq 0) {
+        Write-Warning 'No Python Scripts directory could be resolved; mempalace.exe may stay unavailable on PATH.'
+        return
+    }
+
+    $mempalaceDirs = @($scriptsDirs | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_ 'mempalace.exe')) -or
+        (Test-Path -LiteralPath (Join-Path $_ 'mempalace.cmd'))
+    })
+
+    if ($mempalaceDirs.Count -eq 0) {
+        Write-Warning ("mempalace executable was not found in any Python Scripts directory: {0}" -f ($scriptsDirs -join ', '))
+        Ensure-UserPathPrepend -Entries $scriptsDirs
+        return
+    }
+
+    Write-Info ("Found mempalace executable in: {0}" -f ($mempalaceDirs -join ', '))
+    Ensure-UserPathPrepend -Entries $mempalaceDirs
 }
 
 function Write-Python3Shim {
@@ -930,6 +1016,7 @@ try {
     }
 
     Install-MemPalacePythonBackend -PythonPath $pythonPath
+    Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
     Write-Step 'Writing python3 compatibility shim for Windows'
     Write-Python3Shim -Path $PythonShimPath
     Repair-PiLensTooling -NpmExe $npmExe

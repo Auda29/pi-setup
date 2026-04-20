@@ -435,6 +435,57 @@ function Install-MemPalacePythonBackend {
     Invoke-PythonCommand -PythonPath $PythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
 }
 
+function Get-PythonScriptsDirectories {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $dirs = New-Object System.Collections.Generic.List[string]
+    $probes = @(
+        @{ Label = 'system'; Code = 'import sysconfig; print(sysconfig.get_path("scripts"))' },
+        @{ Label = 'user'; Code = 'import site, os; print(os.path.join(site.USER_BASE, "Scripts"))' }
+    )
+
+    foreach ($probe in $probes) {
+        try {
+            $pythonSpec = Get-PythonCommandSpec -PythonPath $PythonPath
+            $allArguments = @($pythonSpec['BaseArguments']) + @('-c', $probe.Code)
+            $output = (& $pythonSpec['FilePath'] @allArguments 2>$null | Out-String).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($output) -and (Test-Path -LiteralPath $output)) {
+                [void]$dirs.Add($output)
+                Write-Info ("Python {0} Scripts dir: {1}" -f $probe.Label, $output)
+            }
+        }
+        catch {
+            Write-Warning ("Could not resolve Python {0} Scripts dir: {1}" -f $probe.Label, $_.Exception.Message)
+        }
+    }
+
+    return @($dirs | Select-Object -Unique)
+}
+
+function Ensure-MempalaceExecutableOnPath {
+    param([Parameter(Mandatory = $true)][string]$PythonPath)
+
+    $scriptsDirs = @(Get-PythonScriptsDirectories -PythonPath $PythonPath)
+    if ($scriptsDirs.Count -eq 0) {
+        Write-Warning 'No Python Scripts directory could be resolved; mempalace.exe may stay unavailable on PATH.'
+        return
+    }
+
+    $mempalaceDirs = @($scriptsDirs | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_ 'mempalace.exe')) -or
+        (Test-Path -LiteralPath (Join-Path $_ 'mempalace.cmd'))
+    })
+
+    if ($mempalaceDirs.Count -eq 0) {
+        Write-Warning ("mempalace executable was not found in any Python Scripts directory: {0}" -f ($scriptsDirs -join ', '))
+        Ensure-UserPathPrepend -Entries $scriptsDirs
+        return
+    }
+
+    Write-Info ("Found mempalace executable in: {0}" -f ($mempalaceDirs -join ', '))
+    Ensure-UserPathPrepend -Entries $mempalaceDirs
+}
+
 function Write-Python3Shim {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -1189,6 +1240,7 @@ try {
     $GlobalNpmPythonShimPath = if ([string]::IsNullOrWhiteSpace($GlobalNpmBinDir)) { $null } else { Join-Path $GlobalNpmBinDir 'python3.cmd' }
 
     Install-MemPalacePythonBackend -PythonPath $pythonPath
+    Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
     Write-Step 'Writing python3 compatibility shim for Windows'
     Write-Python3Shim -Path $PythonShimPath
     Write-Python3Shim -Path $GlobalPythonShimPath
