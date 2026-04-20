@@ -159,7 +159,7 @@ function Get-AgentsMdContent {
 
 Installed Pi packages:
 - `pi-lens`: Prefer this for code understanding, LSP navigation, references, definitions, hover info, AST-aware search, and precise code changes.
-- `pi-mempalace-extension`: Treat this as a core part of the workflow. Use it actively for memory workflows, persistent project knowledge, reminders, decisions, follow-ups, and important discoveries that should survive the current session.
+- `pi-mempalace-extension`: Treat this as a core part of the workflow. It is the current MemPalace extension and supersedes the older `mempalace-pi` package name. Use it actively for memory workflows, persistent project knowledge, reminders, decisions, follow-ups, and important discoveries that should survive the current session.
 - `pi-subagents`: Use subagents when a task benefits from decomposition, parallel exploration, or specialized analysis.
 - `pi-mcp-adapter`: Use MCP servers/tools when project tasks require external integrations or structured tool access.
 - `pi-web-access`: Use web search/fetch only for external documentation or information not available in the repository.
@@ -167,7 +167,8 @@ $twincatSection
 ## Agent usage guidance
 
 - Start with local repository context first: inspect files, settings, scripts, and code before using external tools.
-- Use `pi-mempalace-extension` as an active workflow component, not just as optional storage.
+- Use `pi-mempalace-extension` as an active workflow component, not just as optional storage or a passive notes area.
+- When MemPalace extension tools are available, use them directly instead of treating memory as an external/manual side channel.
 - When you learn something likely to matter later, store it in `pi-mempalace-extension`.
 - Before or during complex work, consider whether relevant prior knowledge from `pi-mempalace-extension` may exist.
 - Prefer `pi-lens`/LSP and AST-aware search over plain text search when navigating or modifying code.
