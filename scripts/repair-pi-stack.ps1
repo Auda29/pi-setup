@@ -140,9 +140,12 @@ function Invoke-PythonCommand {
 }
 
 function Test-MemPalacePythonBackend {
-    $pythonPath = Get-CommandPathSafe -Name 'py'
-    if (-not $pythonPath) {
-        $pythonPath = Get-CommandPathSafe -Name 'python'
+    $pythonPath = [Environment]::GetEnvironmentVariable('MEMPALACE_PYTHON', 'User')
+    if ([string]::IsNullOrWhiteSpace($pythonPath) -or -not (Test-Path -LiteralPath $pythonPath)) {
+        $pythonPath = Get-CommandPathSafe -Name 'py'
+        if (-not $pythonPath) {
+            $pythonPath = Get-CommandPathSafe -Name 'python'
+        }
     }
 
     if (-not $pythonPath) {
@@ -154,6 +157,34 @@ function Test-MemPalacePythonBackend {
 
     Write-Step 'Validating MemPalace backend after repair'
     Invoke-PythonCommand -PythonPath $pythonPath -Arguments @('-c', 'import mempalace; import mempalace.mcp_server')
+
+    Write-Step 'Validating MemPalace extension environment'
+    $expectedEnv = [ordered]@{
+        'MEMPALACE_PYTHON'  = $pythonPath
+        'PYTHONUTF8'        = '1'
+        'PYTHONIOENCODING'  = 'utf-8'
+    }
+    foreach ($name in $expectedEnv.Keys) {
+        $persisted = [Environment]::GetEnvironmentVariable($name, 'User')
+        if ([string]::IsNullOrWhiteSpace($persisted)) {
+            Write-Warning ("User env {0} is not persisted; the Pi extension may not see it across sessions." -f $name)
+        }
+        else {
+            Write-Info ("{0} (User) = {1}" -f $name, $persisted)
+        }
+    }
+
+    $palaceDir = [Environment]::GetEnvironmentVariable('MEMPAL_DIR', 'User')
+    if ([string]::IsNullOrWhiteSpace($palaceDir)) {
+        $palaceDir = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.mempalace'
+        [Environment]::SetEnvironmentVariable('MEMPAL_DIR', $palaceDir, 'User')
+        $env:MEMPAL_DIR = $palaceDir
+        Write-Info ("Set user env MEMPAL_DIR={0}" -f $palaceDir)
+    }
+    else {
+        Write-Info ("MEMPAL_DIR (User) = {0}" -f $palaceDir)
+    }
+    Ensure-Directory -Path $palaceDir
 }
 
 Ensure-Directory -Path $PiDir

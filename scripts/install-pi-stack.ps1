@@ -104,6 +104,42 @@ function Ensure-UserPathPrepend {
     Refresh-ProcessPath
 }
 
+function Set-PersistentUserEnv {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Value,
+        [switch]$PreserveExisting
+    )
+
+    if ($PreserveExisting) {
+        $existing = [Environment]::GetEnvironmentVariable($Name, 'User')
+        if (-not [string]::IsNullOrWhiteSpace($existing)) {
+            Write-Info ("Preserving existing user env {0}={1}" -f $Name, $existing)
+            Set-Item -LiteralPath ("Env:" + $Name) -Value $existing
+            return $existing
+        }
+    }
+
+    [Environment]::SetEnvironmentVariable($Name, $Value, 'User')
+    Set-Item -LiteralPath ("Env:" + $Name) -Value $Value
+    Write-Info ("Set user env {0}={1}" -f $Name, $Value)
+    return $Value
+}
+
+function Ensure-MempalaceDir {
+    $defaultDir = Join-Path $UserProfilePath '.mempalace'
+    $resolvedDir = Set-PersistentUserEnv -Name 'MEMPAL_DIR' -Value $defaultDir -PreserveExisting
+    if (-not [string]::IsNullOrWhiteSpace($resolvedDir)) {
+        try {
+            Ensure-Directory -Path $resolvedDir
+        }
+        catch {
+            Write-Warning ("Could not create MemPalace directory '{0}': {1}" -f $resolvedDir, $_.Exception.Message)
+        }
+    }
+    return $resolvedDir
+}
+
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -988,40 +1024,48 @@ try {
         Write-Info 'TwinCATAdsSource was provided without IncludeTwinCATAds. Treating the source path as an implicit TwinCAT enable.'
     }
 
-    # MemPalace Python/python3 bootstrap is temporarily disabled while
-    # pi-mempalace-extension is used instead of mempalace-pi.
-    # $pythonPath = Get-CommandPathSafe -Name 'py'
-    # if (-not $pythonPath) {
-    #     $pythonPath = Get-CommandPathSafe -Name 'python'
-    # }
-    #
-    # if (-not $pythonPath) {
-    #     $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
-    #     if (-not $pythonPath) {
-    #         $pythonPath = Get-CommandPathSafe -Name 'python'
-    #     }
-    #     if (-not $pythonPath) {
-    #         $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
-    #     }
-    # }
-    #
-    # if (-not $pythonPath) {
-    #     throw 'Python is required for pi-mempalace-extension but could not be installed or found.'
-    # }
-    #
-    # Refresh-ProcessPath
-    #
-    # try {
-    #     Write-Host "python: $(& $pythonPath --version 2>&1)"
-    # }
-    # catch {
-    #     Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
-    # }
-    #
-    # Install-MemPalacePythonBackend -PythonPath $pythonPath
-    # Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
-    # Write-Step 'Writing python3 compatibility shim for Windows'
-    # Write-Python3Shim -Path $PythonShimPath
+    # pi-mempalace-extension requires a Python runtime with the `mempalace`
+    # package installed. Resolve Python (py launcher preferred), install it
+    # via winget if missing, and install the MemPalace Python backend.
+    $pythonPath = Get-CommandPathSafe -Name 'py'
+    if (-not $pythonPath) {
+        $pythonPath = Get-CommandPathSafe -Name 'python'
+    }
+
+    if (-not $pythonPath) {
+        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
+        if (-not $pythonPath) {
+            $pythonPath = Get-CommandPathSafe -Name 'python'
+        }
+        if (-not $pythonPath) {
+            $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
+        }
+    }
+
+    if (-not $pythonPath) {
+        throw 'Python is required for pi-mempalace-extension but could not be installed or found.'
+    }
+
+    Refresh-ProcessPath
+
+    try {
+        Write-Host "python: $(& $pythonPath --version 2>&1)"
+    }
+    catch {
+        Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
+    }
+
+    Install-MemPalacePythonBackend -PythonPath $pythonPath
+    Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
+    Write-Step 'Writing python3 compatibility shim for Windows'
+    Write-Python3Shim -Path $PythonShimPath
+
+    Write-Step 'Configuring MemPalace extension environment'
+    Set-PersistentUserEnv -Name 'MEMPALACE_PYTHON' -Value $pythonPath | Out-Null
+    Set-PersistentUserEnv -Name 'PYTHONUTF8' -Value '1' | Out-Null
+    Set-PersistentUserEnv -Name 'PYTHONIOENCODING' -Value 'utf-8' | Out-Null
+    Ensure-MempalaceDir | Out-Null
+
     Repair-PiLensTooling -NpmExe $npmExe
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
@@ -1070,8 +1114,8 @@ try {
 }
 catch {
 }
-# `$env:PYTHONUTF8 = '1'
-# `$env:PYTHONIOENCODING = 'utf-8'
+`$env:PYTHONUTF8 = '1'
+`$env:PYTHONIOENCODING = 'utf-8'
 
 `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$ProjectRoot = Split-Path -Parent `$ScriptDir

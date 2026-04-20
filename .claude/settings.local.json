@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -NoProfile -Command ' *)",
+      "Bash(where py *)",
+      "Bash(where python *)",
+      "Bash(py -3 --version)",
+      "Bash(py -3 -m pip --version)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 py -3 -m pip install --upgrade mempalace)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 py -3 -c \"import mempalace; import mempalace.mcp_server; print\\('mempalace OK', mempalace.__file__\\)\")",
+      "Bash(where mempalace *)",
+      "Bash(py -3 -c \"import sysconfig; print\\(sysconfig.get_path\\('scripts'\\)\\)\")",
+      "Bash(MEMPALACE_PYTHON=\"C:\\\\\\\\Users\\\\\\\\wecke\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Programs\\\\\\\\Python\\\\\\\\Launcher\\\\\\\\py.exe\" MEMPAL_DIR=\"C:\\\\\\\\Users\\\\\\\\wecke\\\\\\\\.mempalace\" PYTHONUTF8=1 PYTHONIOENCODING=utf-8 mempalace doctor)",
+      "Bash(MEMPALACE_PYTHON=\"C:\\\\\\\\Users\\\\\\\\wecke\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Programs\\\\\\\\Python\\\\\\\\Launcher\\\\\\\\py.exe\" MEMPAL_DIR=\"C:\\\\\\\\Users\\\\\\\\wecke\\\\\\\\.mempalace\" PYTHONUTF8=1 PYTHONIOENCODING=utf-8 mempalace status)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \"C:\\\\\\\\Users\\\\\\\\wecke\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Programs\\\\\\\\Python\\\\\\\\Launcher\\\\\\\\py.exe\" -c \"import json, sys; from importlib.metadata import PackageNotFoundError, version as package_version; import mempalace; resolved_version = getattr\\(mempalace, '__version__', None\\) or package_version\\('mempalace'\\); print\\(json.dumps\\({'version': resolved_version, 'exe': sys.executable}\\)\\)\")"
+    ]
+  }
+}
