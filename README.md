@@ -38,7 +38,7 @@ Stack components:
 - `pi-mcp-adapter`
 - `pi-lens`
 - `pi-web-access`
-- `mempalace-pi`
+- `pi-mempalace-extension`
 - `pi-twincat-ads` (optional)
 
 Goal: a setup that works robustly on both **fresh Windows systems** and machines with an **existing Pi installation**, while keeping Pi extensions current.
@@ -51,10 +51,10 @@ Goal: a setup that works robustly on both **fresh Windows systems** and machines
 2. installs missing prerequisites via `winget` when possible (existing prerequisites are only upgraded when you pass `-UpdatePrerequisites`)
    - Node.js LTS
    - Git for Windows
-   - Python 3 for `mempalace-pi`
+   - Python 3 for `pi-mempalace-extension`
 3. installs or updates `@mariozechner/pi-coding-agent` globally
 4. installs the Pi packages with the official `pi install` workflow
-5. installs the Python package `mempalace` so `mempalace-pi` works on Windows out of the box
+5. installs the Python package `mempalace` so `pi-mempalace-extension` works on Windows out of the box
 6. preps `pi-lens` for Windows by attempting to install `rg`/`fd` and clearing stale `~\.pi-lens\tools` cache state
 7. writes a robust `.pi/settings.json`
    - `npmCommand`
@@ -81,7 +81,7 @@ Recommended:
 - `winget` available
 - internet access for `winget` and `npm`
 
-If `winget` is missing, you must install missing prerequisites manually, including Python for `mempalace-pi`.
+If `winget` is missing, you must install missing prerequisites manually, including Python for `pi-mempalace-extension`.
 
 ## Quick start
 
@@ -129,7 +129,7 @@ This sets the following for the session:
 - PowerShell console input/output encoding to UTF-8
 - `chcp 65001` when available
 
-That is especially helpful for `mempalace-pi` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
+That is especially helpful for `pi-mempalace-extension` on Windows. The installer also installs and validates the Python `mempalace` backend so the registered MemPalace agent tools can actually work.
 
 For `pi-lens`, the installers also try to provision `rg` and `fd` via `winget`, clear stale state under `%USERPROFILE%\.pi-lens\tools`, and preinstall the common `pi-lens` CLI helpers (`@ast-grep/cli`, `knip`, `jscpd`, `madge`) sequentially so broken auto-install remnants do not survive into the next Pi start.
 
@@ -145,7 +145,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1
 
 ### Require Python
 
-Python is now installed automatically because `mempalace-pi` depends on the Python `mempalace` backend for full functionality.
+Python is now installed automatically because `pi-mempalace-extension` depends on the Python `mempalace` backend for full functionality.
 
 The flag is still accepted for compatibility, but standard installation already prepares Python + `mempalace`:
 
@@ -283,7 +283,7 @@ Installed from npm latest by default:
 - `pi-mcp-adapter`
 - `pi-lens`
 - `pi-web-access`
-- `mempalace-pi`
+- `pi-mempalace-extension`
 
 ## What happens if Pi is already installed?
 
@@ -312,7 +312,7 @@ The start script already includes a fallback to `%APPDATA%\npm\pi.cmd`.
 
 Pi needs a Bash shell on Windows. The script therefore tries to install Git for Windows and then sets `shellPath` in `.pi/settings.json`.
 
-### 4. Python or encoding issues with `mempalace-pi`
+### 4. Python or encoding issues with `pi-mempalace-extension`
 
 Always start Pi via:
 
@@ -320,7 +320,7 @@ Always start Pi via:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pi.ps1
 ```
 
-The setup now writes Windows `python3` shims in `.pi\bin\python3.cmd`, `%USERPROFILE%\.pi\agent\bin\python3.cmd`, and the detected global npm bin directory next to `pi.cmd`. They forward to `py -3` first and then `python`. The global installer also prepends the detected npm bin directory and `%USERPROFILE%\.pi\agent\bin` to the user PATH so these shims resolve before the Microsoft Store alias. That covers packages such as `mempalace-pi` that may still try to launch `python3` explicitly on Windows, even when Pi is started via `pi` directly or through an IDE launcher.
+The setup now writes Windows `python3` shims in `.pi\bin\python3.cmd`, `%USERPROFILE%\.pi\agent\bin\python3.cmd`, and the detected global npm bin directory next to `pi.cmd`. They forward to `py -3` first and then `python`. The global installer also prepends the detected npm bin directory and `%USERPROFILE%\.pi\agent\bin` to the user PATH so these shims resolve before the Microsoft Store alias. That covers packages such as `pi-mempalace-extension` that may still try to launch `python3` explicitly on Windows, even when Pi is started via `pi` directly or through an IDE launcher.
 
 ### 5. `pi-lens` auto-install failures (`rg`, `fd`, `ast-grep`, `knip`, `jscpd`, `madge`)
 

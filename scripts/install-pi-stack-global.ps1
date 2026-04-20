@@ -37,7 +37,7 @@ $LegacyGlobalAgentsDir = Join-Path $UserProfilePath '.pi\agents'
 $LegacyGlobalAgentsPath = Join-Path $LegacyGlobalAgentsDir 'AGENTS.md'
 
 $PackageNames = @(
-    'mempalace-pi',
+    'pi-mempalace-extension',
     'pi-lens',
     'pi-mcp-adapter',
     'pi-subagents',
@@ -284,7 +284,7 @@ function Get-AgentsMdContent {
 
 Installed Pi packages:
 - `pi-lens`: Prefer this for code understanding, LSP navigation, references, definitions, hover info, AST-aware search, and precise code changes.
-- `mempalace-pi`: Treat this as a core part of the workflow. Use it actively for memory workflows, persistent project knowledge, reminders, decisions, follow-ups, and important discoveries that should survive the current session.
+- `pi-mempalace-extension`: Treat this as a core part of the workflow. Use it actively for memory workflows, persistent project knowledge, reminders, decisions, follow-ups, and important discoveries that should survive the current session.
 - `pi-subagents`: Use subagents when a task benefits from decomposition, parallel exploration, or specialized analysis.
 - `pi-mcp-adapter`: Use MCP servers/tools when project tasks require external integrations or structured tool access.
 - `pi-web-access`: Use web search/fetch only for external documentation or information not available in the repository.
@@ -292,15 +292,15 @@ $twincatSection
 ## Agent usage guidance
 
 - Start with local repository context first, but assume these globally installed Pi tools may be available across repositories and editors.
-- Use `mempalace-pi` as an active workflow component, not just as optional storage.
-- When you learn something likely to matter later, store it in `mempalace-pi`.
-- Before or during complex work, consider whether relevant prior knowledge from `mempalace-pi` may exist.
+- Use `pi-mempalace-extension` as an active workflow component, not just as optional storage.
+- When you learn something likely to matter later, store it in `pi-mempalace-extension`.
+- Before or during complex work, consider whether relevant prior knowledge from `pi-mempalace-extension` may exist.
 - Prefer `pi-lens`/LSP and AST-aware search over plain text search when navigating or modifying code.
 - Use `pi-subagents` only when the task is complex enough to benefit from delegation.
 - Use `pi-mcp-adapter` and `pi-web-access` deliberately, not by default.
 - Keep edits minimal, precise, and consistent with each repository's existing structure.
 - When changing behavior, also update nearby documentation and scripts if needed.
-- For Python-backed features such as `mempalace-pi` on Windows, prefer the provided start scripts and UTF-8 environment settings.
+- For Python-backed features such as `pi-mempalace-extension` on Windows, prefer the provided start scripts and UTF-8 environment settings.
 
 ## Global project note
 
@@ -1203,52 +1203,54 @@ try {
         Write-Info 'TwinCATAdsSource was provided without IncludeTwinCATAds. Treating the source path as an implicit TwinCAT enable.'
     }
 
-    $pythonPath = Get-CommandPathSafe -Name 'py'
-    if (-not $pythonPath) {
-        $pythonPath = Get-CommandPathSafe -Name 'python'
-    }
-
-    if (-not $pythonPath) {
-        $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
-        if (-not $pythonPath) {
-            $pythonPath = Get-CommandPathSafe -Name 'python'
-        }
-        if (-not $pythonPath) {
-            $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
-        }
-    }
-
-    if (-not $pythonPath) {
-        throw 'Python is required for mempalace-pi but could not be installed or found.'
-    }
-
-    Refresh-ProcessPath
+    # MemPalace Python/python3 bootstrap is temporarily disabled while
+    # pi-mempalace-extension is used instead of mempalace-pi.
+    # $pythonPath = Get-CommandPathSafe -Name 'py'
+    # if (-not $pythonPath) {
+    #     $pythonPath = Get-CommandPathSafe -Name 'python'
+    # }
+    #
+    # if (-not $pythonPath) {
+    #     $pythonPath = Ensure-Command -Name 'py' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python Launcher' -Optional
+    #     if (-not $pythonPath) {
+    #         $pythonPath = Get-CommandPathSafe -Name 'python'
+    #     }
+    #     if (-not $pythonPath) {
+    #         $pythonPath = Ensure-Command -Name 'python' -WingetPackageId 'Python.Python.3.12' -DisplayName 'Python 3'
+    #     }
+    # }
+    #
+    # if (-not $pythonPath) {
+    #     throw 'Python is required for pi-mempalace-extension but could not be installed or found.'
+    # }
+    #
+    # Refresh-ProcessPath
 
     Write-Host "node: $(& $nodePath --version)"
     Write-Host "npm:  $(& $npmExe --version)"
     Write-Host "git:  $(& $gitPath --version)"
     Write-Host "bash: $gitBashPath"
 
-    try {
-        Write-Host "python: $(& $pythonPath --version 2>&1)"
-    }
-    catch {
-        Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
-    }
+    # try {
+    #     Write-Host "python: $(& $pythonPath --version 2>&1)"
+    # }
+    # catch {
+    #     Write-Warning "Python was found, but its version could not be read: $($_.Exception.Message)"
+    # }
 
     $GlobalNpmBinDir = Get-GlobalNpmBinDir -NpmExe $npmExe
     $GlobalNpmPythonShimPath = if ([string]::IsNullOrWhiteSpace($GlobalNpmBinDir)) { $null } else { Join-Path $GlobalNpmBinDir 'python3.cmd' }
 
-    Install-MemPalacePythonBackend -PythonPath $pythonPath
-    Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
-    Write-Step 'Writing python3 compatibility shim for Windows'
-    Write-Python3Shim -Path $PythonShimPath
-    Write-Python3Shim -Path $GlobalPythonShimPath
-    if (-not [string]::IsNullOrWhiteSpace($GlobalNpmPythonShimPath)) {
-        Write-Python3Shim -Path $GlobalNpmPythonShimPath
-    }
+    # Install-MemPalacePythonBackend -PythonPath $pythonPath
+    # Ensure-MempalaceExecutableOnPath -PythonPath $pythonPath
+    # Write-Step 'Writing python3 compatibility shim for Windows'
+    # Write-Python3Shim -Path $PythonShimPath
+    # Write-Python3Shim -Path $GlobalPythonShimPath
+    # if (-not [string]::IsNullOrWhiteSpace($GlobalNpmPythonShimPath)) {
+    #     Write-Python3Shim -Path $GlobalNpmPythonShimPath
+    # }
     Ensure-UserPathPrepend -Entries @($GlobalNpmBinDir, $GlobalPiAgentBinDir)
-    Warn-IfPython3StillHitsWindowsAlias
+    # Warn-IfPython3StillHitsWindowsAlias
     Repair-PiLensTooling -NpmExe $npmExe
 
     Install-GlobalPiCodingAgent -NpmExe $npmExe
@@ -1299,8 +1301,8 @@ try {
 }
 catch {
 }
-`$env:PYTHONUTF8 = '1'
-`$env:PYTHONIOENCODING = 'utf-8'
+# `$env:PYTHONUTF8 = '1'
+# `$env:PYTHONIOENCODING = 'utf-8'
 `$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$InstallRoot = Split-Path -Parent `$ScriptDir
 `$ShimDir = Join-Path `$InstallRoot 'bin'
@@ -1376,7 +1378,7 @@ The start script sets these environment variables for the current session:
 - PYTHONUTF8=1
 - PYTHONIOENCODING=utf-8
 
-That is especially useful on Windows, in particular for mempalace-pi. The installer also provisions the Python `mempalace` backend so the MemPalace agent tools can run.
+That is especially useful on Windows, in particular for pi-mempalace-extension. The installer also provisions the Python `mempalace` backend so the MemPalace agent tools can run.
 
 If something goes wrong
 -----------------------
@@ -1394,7 +1396,7 @@ Installed packages
 - pi-mcp-adapter
 - pi-lens
 - pi-web-access
-- mempalace-pi
+- pi-mempalace-extension
 '@
     if ($IncludeTwinCATAds -or -not [string]::IsNullOrWhiteSpace($TwinCATAdsSource)) {
         $readme += @'

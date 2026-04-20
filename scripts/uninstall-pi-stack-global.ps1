@@ -233,7 +233,7 @@ function Save-JsonObject {
 
 function Get-PiPackageSources {
     return @(
-        'npm:mempalace-pi',
+        'npm:pi-mempalace-extension',
         'npm:pi-lens',
         'npm:pi-mcp-adapter',
         'npm:pi-subagents',
