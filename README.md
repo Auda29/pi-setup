@@ -153,12 +153,12 @@ The flag is still accepted for compatibility, but standard installation already 
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -RequirePython
 ```
 
-### Select Pi agent version
+### Pin Pi agent version
 
-The installers default to `@mariozechner/pi-coding-agent` `0.67.68`, but you can override that explicitly:
+The installers default to the latest published `@mariozechner/pi-coding-agent` version from npm. If you need a reproducible install, you can pin a specific version explicitly:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -AgentVersion 0.67.68
+powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack.ps1 -AgentVersion <version>
 ```
 
 ### Latest package versions
@@ -256,7 +256,7 @@ This makes it more likely to survive:
 Running `install-pi-stack.ps1`, `install-pi-stack-global.ps1`, or the corresponding repair scripts refreshes the installed stack instead of only skipping existing tools.
 
 - `mempalace` is always updated with `pip install --upgrade mempalace`.
-- `@mariozechner/pi-coding-agent` is reinstalled to the currently configured supported version.
+- `@mariozechner/pi-coding-agent` is reinstalled from npm latest unless `-AgentVersion` pins a specific version.
 - Pi packages are reinstalled through `pi install`.
 - Pi packages are always resolved to the latest npm versions.
 - Prerequisites managed through `winget` (Node.js, Git, Python) are **not** upgraded by default. Pass `-UpdatePrerequisites` to opt in to `winget upgrade` for those tools.
@@ -404,12 +404,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -UseLatestPackageVersions
 ```
 
-You can also override the global Pi agent version explicitly:
+You can also pin the global Pi agent version explicitly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-pi-stack-global.ps1 `
   -InstallRoot C:\Tools\pi-stack `
-  -AgentVersion 0.67.68
+  -AgentVersion <version>
 ```
 
 ### 5. Optional: include `pi-twincat-ads` from npm

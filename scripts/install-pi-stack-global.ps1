@@ -3,7 +3,7 @@ param(
     [string]$InstallRoot = '',
     [switch]$IncludeTwinCATAds,
     [string]$TwinCATAdsSource,
-    [string]$AgentVersion = '0.67.68',
+    [string]$AgentVersion = '',
     [switch]$RequirePython,
     [switch]$UseLatestPackageVersions,
     [switch]$UpdatePrerequisites
