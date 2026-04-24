@@ -256,15 +256,17 @@ function Migrate-LegacyGlobalInstallLayout {
         return
     }
 
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $moves = @(
-        @{ Source = (Join-Path $legacyPiDir 'settings.json'); Destination = (Join-Path $InstallRootPath 'settings.json') },
+        @{ Source = (Join-Path $legacyPiDir 'settings.json'); Destination = (Join-Path $InstallRootPath "backups\legacy-settings-$timestamp.json.bak") },
         @{ Source = (Join-Path $legacyPiDir 'logs'); Destination = (Join-Path $InstallRootPath 'logs') },
-        @{ Source = (Join-Path $legacyPiDir 'backups'); Destination = (Join-Path $InstallRootPath 'backups') }
+        @{ Source = (Join-Path $legacyPiDir 'backups'); Destination = (Join-Path $InstallRootPath 'backups\legacy-nested-backups') }
     )
 
     foreach ($move in $moves) {
         if ((Test-Path -LiteralPath $move.Source) -and -not (Test-Path -LiteralPath $move.Destination)) {
             try {
+                Ensure-Directory -Path (Split-Path -Parent $move.Destination)
                 Move-Item -LiteralPath $move.Source -Destination $move.Destination -Force -ErrorAction Stop
                 Write-Info "Migrated legacy global stack path: $($move.Source) -> $($move.Destination)"
             }

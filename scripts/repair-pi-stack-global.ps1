@@ -254,8 +254,15 @@ try {
     if ($UseLatestPackageVersions) { $arguments += '-UseLatestPackageVersions' }
     if ($UpdatePrerequisites) { $arguments += '-UpdatePrerequisites' }
 
+    $repairWorkingDirectory = if (Test-Path -LiteralPath $ResolvedInstallRoot) {
+        $ResolvedInstallRoot
+    }
+    else {
+        $InstallerScriptDir
+    }
+
     Invoke-WithRetry -Description 'Re-running global install script' -Action {
-        Invoke-External -FilePath (Get-PowerShellExecutablePath) -Arguments $arguments -WorkingDirectory $ResolvedInstallRoot
+        Invoke-External -FilePath (Get-PowerShellExecutablePath) -Arguments $arguments -WorkingDirectory $repairWorkingDirectory
     } -MaxAttempts 2 -DelaySeconds 5
 
     Test-MemPalacePythonBackend
